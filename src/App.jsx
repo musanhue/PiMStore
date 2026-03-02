@@ -241,11 +241,8 @@ export default function App() {
       <nav className="fixed top-0 w-full bg-[#f5f5f7]/80 backdrop-blur-md z-[60] border-b border-gray-200/50">
         <div className="max-w-6xl mx-auto px-6 h-14 flex justify-between items-center">
           <div className="flex items-center gap-8">
-            <div onClick={() => setView('home')} className="flex items-center gap-2 cursor-pointer group">
-              <div className="bg-black text-white p-1 rounded-md group-hover:bg-indigo-600 transition-colors">
-                <Zap size={16} fill="currentColor" />
-              </div>
-              <span className="text-[17px] font-bold tracking-tight">PiMStore</span>
+            <div onClick={() => setView('home')} className="flex items-center cursor-pointer group">
+              <img src="/pimstore-extended-logo.svg" alt="PiMStore Logo" className="h-7 md:h-8 w-auto group-hover:opacity-80 transition-opacity" />
             </div>
             <div className="hidden md:flex gap-6 text-[12px] font-medium text-gray-500">
               <button onClick={() => setView('home')} className={`hover:text-black transition-colors ${view === 'home' ? 'text-black font-bold' : ''}`}>Tienda</button>
@@ -380,7 +377,9 @@ export default function App() {
       <footer className="bg-white border-t border-gray-200 pt-20 pb-10 mt-auto">
         <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 text-[12px] font-medium text-gray-500">
           <div className="md:col-span-2 space-y-4">
-            <div className="flex items-center gap-2 text-black font-bold text-[17px] mb-4"><Zap size={18} fill="black" /> PiMStore</div>
+            <div className="mb-4">
+              <img src="/pimstore-extended-logo.svg" alt="PiMStore Logo" className="h-8 md:h-10 w-auto" />
+            </div>
             <p className="max-w-sm leading-relaxed">Diseño minimalista, tecnología excepcional.</p>
           </div>
           <div className="space-y-3">
