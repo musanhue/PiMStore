@@ -37,19 +37,45 @@ const functions = getFunctions(firebaseApp);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'pimstore-prod';
 
 // --- HELPERS Y UTILIDADES ---
+// Función para validar que un RUT chileno sea real (Módulo 11)
 const validateRut = (rut) => {
+  // Limpiar puntos, guiones y pasar a mayúsculas
   const cleanRut = rut.replace(/\./g, '').replace(/-/g, '').toUpperCase();
   if (cleanRut.length < 8) return false;
+
+  // Separar el cuerpo numérico y el dígito verificador
   const num = cleanRut.slice(0, -1);
   const dv = cleanRut.slice(-1);
+
+  // Calcular módulo 11
   let s = 0, m = 2;
   for (let i = num.length - 1; i >= 0; i--) {
     s += parseInt(num[i]) * m;
     m = m === 7 ? 2 : m + 1;
   }
+
   const res = 11 - (s % 11);
   const dvr = res === 11 ? '0' : res === 10 ? 'K' : String(res);
+
+  // Retornar verdadero si el dígito calculado coincide con el ingresado
   return dvr === dv;
+};
+
+// Función para formatear el RUT chileno automáticamente (ej: 12.345.678-9)
+const formatRut = (value) => {
+  // Remover todo lo que no sea número o la letra K
+  let rut = value.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (!rut) return '';
+  if (rut.length <= 1) return rut;
+
+  // Separar cuerpo y dígito verificador
+  const body = rut.slice(0, -1);
+  const dv = rut.slice(-1);
+
+  // Agregar puntos cada 3 dígitos
+  const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  return `${formattedBody}-${dv}`;
 };
 
 const generateNumericOrder = () => {
@@ -601,7 +627,7 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="Nombre Completo" value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} />
-              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="RUT (ej: 12345678-9)" value={formData.rut} onChange={e => setFormData({ ...formData, rut: e.target.value })} />
+              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="RUT (ej: 12.345.678-9)" value={formData.rut} onChange={e => setFormData({ ...formData, rut: formatRut(e.target.value) })} maxLength={12} />
               <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="Email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
               <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="Teléfono" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} />
               <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none md:col-span-2" placeholder="Dirección de envío (Ej: Av. Apoquindo 1234, Depto 56)" value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} />
@@ -626,7 +652,18 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
             </div>
             <div className="pt-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-gray-100">
               <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">A pagar</p><p className="text-[32px] font-extrabold">${total.toLocaleString('es-CL')}</p></div>
-              <button onClick={handleNext} disabled={loading} className="w-full sm:w-auto bg-black text-white px-10 py-4 rounded-2xl font-bold hover:bg-indigo-600 transition-all shadow-xl">{loading ? 'Procesando...' : 'Ir al pago'}</button>
+              <div className="w-full sm:w-auto flex flex-col items-end gap-2">
+                <button
+                  onClick={handleNext}
+                  disabled={loading || !validateRut(formData.rut)}
+                  className={`w-full bg-black text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl ${loading || !validateRut(formData.rut) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
+                >
+                  {loading ? 'Procesando...' : 'Finalizar Compra'}
+                </button>
+                {formData.rut && formData.rut.length >= 8 && !validateRut(formData.rut) && (
+                  <span className="text-red-500 text-[12px] font-medium px-2">RUT inválido. Verifica el número.</span>
+                )}
+              </div>
             </div>
           </div>
         ) : (
