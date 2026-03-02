@@ -602,8 +602,19 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
 
   const comunasDisponibles = regionesYComunas.find(r => r.region === formData.region)?.comunas || [];
 
+  // Validaciones
+  const isValidNombre = formData.nombre.trim().split(/\s+/).length >= 2;
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email);
+  const isValidTelefono = /^\+569\s*\d{8}$/.test(formData.telefono.trim());
+  const isValidDireccion = formData.direccion.trim().length >= 5;
+  const isValidRut = validateRut(formData.rut);
+  const isValidRegion = formData.region !== '';
+  const isValidComuna = formData.comuna !== '';
+
+  const isFormValid = isValidNombre && isValidEmail && isValidTelefono && isValidDireccion && isValidRut && isValidRegion && isValidComuna;
+
   const handleNext = async () => {
-    if (!validateRut(formData.rut)) return alert("RUT Inválido");
+    if (!isFormValid) return;
     setLoading(true);
     try {
       const crearPago = httpsCallable(functions, 'crearPreferenciaPago');
@@ -626,11 +637,11 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
         {!preferenceId ? (
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="Nombre Completo" value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} />
-              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="RUT (ej: 12.345.678-9)" value={formData.rut} onChange={e => setFormData({ ...formData, rut: formatRut(e.target.value) })} maxLength={12} />
-              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="Email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
-              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none" placeholder="Teléfono" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} />
-              <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none md:col-span-2" placeholder="Dirección de envío (Ej: Av. Apoquindo 1234, Depto 56)" value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} />
+              <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.nombre.length > 0 && !isValidNombre ? 'border-red-400' : 'border-transparent'}`} placeholder="Nombre Completo" value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} />
+              <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.rut.length > 0 && !isValidRut ? 'border-red-400' : 'border-transparent'}`} placeholder="RUT (ej: 12.345.678-9)" value={formData.rut} onChange={e => setFormData({ ...formData, rut: formatRut(e.target.value) })} maxLength={12} />
+              <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.email.length > 0 && !isValidEmail ? 'border-red-400' : 'border-transparent'}`} placeholder="Email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
+              <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.telefono.length > 5 && !isValidTelefono ? 'border-red-400' : 'border-transparent'}`} placeholder="Teléfono" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} />
+              <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors md:col-span-2 ${formData.direccion.length > 0 && !isValidDireccion ? 'border-red-400' : 'border-transparent'}`} placeholder="Dirección de envío (Ej: Av. Apoquindo 1234, Depto 56)" value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} />
               <div className="relative w-full">
                 <select className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none appearance-none cursor-pointer" value={formData.region} onChange={e => setFormData({ ...formData, region: e.target.value, comuna: '' })}>
                   <option value="" disabled>Selecciona tu Región</option>
@@ -655,12 +666,12 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
               <div className="w-full sm:w-auto flex flex-col items-end gap-2">
                 <button
                   onClick={handleNext}
-                  disabled={loading || !validateRut(formData.rut)}
-                  className={`w-full bg-black text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl ${loading || !validateRut(formData.rut) ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
+                  disabled={loading || !isFormValid}
+                  className={`w-full bg-black text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl ${loading || !isFormValid ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
                 >
                   {loading ? 'Procesando...' : 'Finalizar Compra'}
                 </button>
-                {formData.rut && formData.rut.length >= 8 && !validateRut(formData.rut) && (
+                {formData.rut && formData.rut.length >= 8 && !isValidRut && (
                   <span className="text-red-500 text-[12px] font-medium px-2">RUT inválido. Verifica el número.</span>
                 )}
               </div>
