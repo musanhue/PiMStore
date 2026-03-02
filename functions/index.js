@@ -16,11 +16,11 @@ const client = new MercadoPagoConfig({ accessToken: 'TEST-2437783845936267-02180
  * Se llama desde el Frontend cuando el cliente confirma sus datos.
  */
 exports.crearPreferenciaPago = onCall(async (request) => {
-  const data = request.data; 
+  const data = request.data;
 
   try {
     const preference = new Preference(client);
-    
+
     // Mapeo de productos para MP
     const items = data.items.map(item => ({
       title: item.title,
@@ -36,18 +36,18 @@ exports.crearPreferenciaPago = onCall(async (request) => {
           name: data.customer.nombre,
           email: data.customer.email,
           phone: {
-             area_code: "56",
-             number: String(data.customer.telefono).replace(/\D/g, "").slice(-8)
+            area_code: "56",
+            number: String(data.customer.telefono).replace(/\D/g, "").slice(-8)
           }
         },
         back_urls: {
-          success: "https://pimstore.cl", // Cambia esto a tu dominio real si difiere
-          failure: "https://pimstore.cl",
-          pending: "https://pimstore.cl"
+          success: "https://pimstore.cl/success", // Cambiar por la URL real de éxito
+          failure: "https://pimstore.cl/checkout", // Mantiene al usuario en el checkout
+          pending: "https://pimstore.cl/checkout"
         },
         auto_return: "approved",
         metadata: {
-            customer_rut: data.customer.rut
+          customer_rut: data.customer.rut
         }
       }
     });
@@ -56,7 +56,8 @@ exports.crearPreferenciaPago = onCall(async (request) => {
 
   } catch (error) {
     console.error("Error MercadoPago:", error);
-    throw new HttpsError('internal', 'No se pudo iniciar el pago', error);
+    // Retornamos el error al cliente de forma controlada
+    return { error: "No se pudo iniciar el pago. Verifica tus datos o intenta más tarde." };
   }
 });
 
@@ -65,34 +66,63 @@ exports.crearPreferenciaPago = onCall(async (request) => {
  * Se activa automáticamente cuando se crea una orden en Firestore con estado "pagado".
  */
 exports.enviarOrdenADropi = onDocumentCreated({
-    document: "artifacts/{appId}/public/data/orders/{orderId}",
-    retry: true
+  document: "artifacts/{appId}/public/data/orders/{orderId}",
+  retry: true
 }, async (event) => {
-    const snap = event.data;
-    if (!snap) return null;
+  const snap = event.data;
+  if (!snap) return null;
 
-    const orderData = snap.data();
-    
-    // Solo enviamos si está pagado y no se ha enviado aún
-    if (orderData.status !== 'pagado' || orderData.dropiSync === 'enviado') return null;
+  const orderData = snap.data();
 
-    console.log(`Procesando orden para Dropi: ${orderData.orderNumber}`);
+  // VERIFICACIÓN CRÍTICA: Solo enviamos a Dropi si el estado es explícitamente 'pagado' (Mercado Pago 'approved')
+  // y si no se ha sincronizado previamente.
+  if (orderData.status !== 'pagado' || orderData.dropiSync === 'enviado') {
+    console.log(`Orden ${orderData.orderNumber} ignorada. Estado: ${orderData.status}, Sync: ${orderData.dropiSync}`);
+    return null;
+  }
 
-    if (DROPI_API_KEY === "PENDIENTE_DE_SOPORTE") {
-        console.log("⚠️ API Key de Dropi no configurada. Orden guardada solo en Firebase.");
-        return null;
-    }
+  console.log(`Procesando orden confirmada para Dropi: ${orderData.orderNumber}`);
 
-    // Lógica de conexión a Dropi (se descomenta cuando tengas la Key)
-    /*
-    try {
-        const response = await axios.post(DROPI_URL, { ...mapeoDeDatos }, { headers: ... });
-        return snap.ref.update({ dropiSync: 'enviado', dropiId: response.data.id });
-    } catch (e) {
-        console.error(e);
-        return snap.ref.update({ dropiSync: 'error', dropiError: e.message });
-    }
-    */
+  if (DROPI_API_KEY === "PENDIENTE_DE_SOPORTE") {
+    console.log("⚠️ API Key de Dropi no configurada. Orden guardada solo en Firebase.");
+    return null; // Opcional: podrías marcar dropiSync: 'pendiente' en la orden
+  }
 
-    return null; 
+  // Mapeo detallado de datos para Dropi
+  const mapeoDeDatos = {
+    number: orderData.orderNumber,
+    customer_name: orderData.customer.nombre,
+    customer_email: orderData.customer.email,
+    customer_phone: orderData.customer.telefono,
+    customer_address: orderData.customer.direccion, // Aquí ya va "Calle Numero Depto"
+    customer_city: orderData.customer.comuna,
+    customer_province: orderData.customer.region,
+    customer_rut: orderData.customer.rut,
+    // Dropi suele usar 'comments', 'reference' o 'observations' para la información adicional del repartidor
+    comments: orderData.customer.notasEnvio || "Sin instrucciones adicionales",
+    products: orderData.items.map(item => ({
+      name: item.title,
+      quantity: item.quantity,
+      price: item.price,
+      sku: item.dropiSku || ""
+    }))
+  };
+
+  // Lógica de conexión a Dropi (se descomenta cuando tengas la Key)
+  /*
+  try {
+      const response = await axios.post(DROPI_URL, mapeoDeDatos, { 
+          headers: { 
+              "Authorization": `Bearer ${DROPI_API_KEY}`,
+              "Content-Type": "application/json"
+          } 
+      });
+      return snap.ref.update({ dropiSync: 'enviado', dropiId: response.data.id });
+  } catch (e) {
+      console.error(e);
+      return snap.ref.update({ dropiSync: 'error', dropiError: e.message });
+  }
+  */
+
+  return null;
 });

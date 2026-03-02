@@ -596,9 +596,10 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
 };
 
 const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
-  const [formData, setFormData] = useState({ nombre: '', rut: '', email: user && !user.isAnonymous ? user.email : '', telefono: '+569 ', direccion: '', comuna: '', region: '' });
+  const [formData, setFormData] = useState({ nombre: '', rut: '', email: user && !user.isAnonymous ? user.email : '', telefono: '+569 ', calle: '', numero: '', depto: '', comuna: '', region: '', notasEnvio: '' });
   const [preferenceId, setPreferenceId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   const comunasDisponibles = regionesYComunas.find(r => r.region === formData.region)?.comunas || [];
 
@@ -606,26 +607,56 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
   const isValidNombre = formData.nombre.trim().split(/\s+/).length >= 2;
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email);
   const isValidTelefono = /^\+569\s*\d{8}$/.test(formData.telefono.trim());
-  const isValidDireccion = formData.direccion.trim().length >= 5;
+  const isValidCalle = formData.calle.trim().length >= 3;
+  const isValidNumero = formData.numero.trim().length >= 1;
   const isValidRut = validateRut(formData.rut);
   const isValidRegion = formData.region !== '';
   const isValidComuna = formData.comuna !== '';
 
-  const isFormValid = isValidNombre && isValidEmail && isValidTelefono && isValidDireccion && isValidRut && isValidRegion && isValidComuna;
+  const isFormValid = isValidNombre && isValidEmail && isValidTelefono && isValidCalle && isValidNumero && isValidRut && isValidRegion && isValidComuna;
 
   const handleNext = async () => {
     if (!isFormValid) return;
     setLoading(true);
+    setPaymentError('');
     try {
+      // Combinamos la dirección para el backend
+      const direccionCompleta = `${formData.calle} ${formData.numero} ${formData.depto ? 'Depto ' + formData.depto : ''}`.trim();
+      const customerData = { ...formData, direccion: direccionCompleta };
+
       const crearPago = httpsCallable(functions, 'crearPreferenciaPago');
-      const res = await crearPago({ items: cart, customer: formData });
-      if (res.data?.preferenceId) setPreferenceId(res.data.preferenceId);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+      const res = await crearPago({ items: cart, customer: customerData });
+
+      if (res.data?.preferenceId) {
+        setPreferenceId(res.data.preferenceId);
+      } else if (res.data?.error) {
+        setPaymentError(res.data.error || "Error al iniciar el pago.");
+        setPreferenceId(null);
+      }
+    } catch (e) {
+      console.error(e);
+      setPaymentError("Hubo un problema de conexión al procesar el pago. Por favor, intenta de nuevo.");
+      setPreferenceId(null);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  // Escuchar mensajes de MercadoPago (ej. cuando se cierra el popup o hay error)
+  useEffect(() => {
+    const handleMessage = (event) => {
+      // MP envía mensajes postMessage. Aquí podríamos interceptar si cierra el modal.
+      // Por simplicidad, si el preferenceId existe y el cliente vuelve a la tienda sin éxito,
+      // le permitimos reintentar simplemente recargando la preferencia o mostrando un botón de "Volver"
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
 
   const simulateSuccess = async () => {
     const num = generateNumericOrder();
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), { orderNumber: num, customer: formData, items: cart, total, status: 'pagado', createdAt: serverTimestamp() });
+    const direccionCompleta = `${formData.calle} ${formData.numero} ${formData.depto ? 'Depto ' + formData.depto : ''}`.trim();
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), { orderNumber: num, customer: { ...formData, direccion: direccionCompleta }, items: cart, total, status: 'pagado', createdAt: serverTimestamp() });
     onComplete(num);
   };
 
@@ -641,7 +672,13 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
               <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.rut.length > 0 && !isValidRut ? 'border-red-400' : 'border-transparent'}`} placeholder="RUT (ej: 12.345.678-9)" value={formData.rut} onChange={e => setFormData({ ...formData, rut: formatRut(e.target.value) })} maxLength={12} />
               <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.email.length > 0 && !isValidEmail ? 'border-red-400' : 'border-transparent'}`} placeholder="Email" type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
               <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.telefono.length > 5 && !isValidTelefono ? 'border-red-400' : 'border-transparent'}`} placeholder="Teléfono" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} />
-              <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors md:col-span-2 ${formData.direccion.length > 0 && !isValidDireccion ? 'border-red-400' : 'border-transparent'}`} placeholder="Dirección de envío (Ej: Av. Apoquindo 1234, Depto 56)" value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} />
+
+              <div className="md:col-span-2 grid grid-cols-[2fr_1fr_1fr] gap-4">
+                <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.calle.length > 0 && !isValidCalle ? 'border-red-400' : 'border-transparent'}`} placeholder="Calle principal" value={formData.calle} onChange={e => setFormData({ ...formData, calle: e.target.value })} />
+                <input className={`w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border transition-colors ${formData.numero.length > 0 && !isValidNumero ? 'border-red-400' : 'border-transparent'}`} placeholder="Número" value={formData.numero} onChange={e => setFormData({ ...formData, numero: e.target.value })} />
+                <input className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border border-transparent" placeholder="Depto (Opcional)" value={formData.depto} onChange={e => setFormData({ ...formData, depto: e.target.value })} />
+              </div>
+
               <div className="relative w-full">
                 <select className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none appearance-none cursor-pointer" value={formData.region} onChange={e => setFormData({ ...formData, region: e.target.value, comuna: '' })}>
                   <option value="" disabled>Selecciona tu Región</option>
@@ -660,15 +697,35 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
                   <ChevronRight className="w-4 h-4 rotate-90" />
                 </div>
               </div>
+
+              <textarea
+                className="w-full bg-[#f5f5f7] rounded-xl p-4 outline-none border border-transparent md:col-span-2 h-24 resize-none text-[15px]"
+                placeholder="Instrucciones para el envío (Opcional - Ej: Dejar en conserjería, llamar al llegar...)"
+                value={formData.notasEnvio}
+                onChange={e => setFormData({ ...formData, notasEnvio: e.target.value })}
+              ></textarea>
             </div>
-            <div className="pt-10 flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-gray-100">
+
+            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 p-4 rounded-xl flex items-start gap-3 mt-4">
+              <AlertCircle className="w-6 h-6 shrink-0 mt-0.5" />
+              <p className="text-sm font-medium">Es importante que la información sea correcta para que no existan problemas en el envío y en la entrega de tu producto.</p>
+            </div>
+
+            {paymentError && (
+              <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl font-medium text-sm text-center">
+                {paymentError}
+              </div>
+            )}
+
+            <div className="pt-8 flex flex-col sm:flex-row justify-between items-center gap-6 border-t border-gray-100">
               <div><p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">A pagar</p><p className="text-[32px] font-extrabold">${total.toLocaleString('es-CL')}</p></div>
               <div className="w-full sm:w-auto flex flex-col items-end gap-2">
                 <button
                   onClick={handleNext}
                   disabled={loading || !isFormValid}
-                  className={`w-full bg-black text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl ${loading || !isFormValid ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
+                  className={`w-full bg-black text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl flex items-center justify-center gap-2 ${loading || !isFormValid ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
                 >
+                  {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
                   {loading ? 'Procesando...' : 'Finalizar Compra'}
                 </button>
                 {formData.rut && formData.rut.length >= 8 && !isValidRut && (
@@ -679,8 +736,17 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
           </div>
         ) : (
           <div className="space-y-10">
-            <div className="bg-[#f5f5f7] p-8 rounded-[32px] flex items-center gap-6"><ShieldCheck size={32} className="text-indigo-600" /><div><p className="text-lg font-bold">Pago Seguro</p><p className="text-xs text-gray-500 font-medium tracking-wide">Cifrado de nivel bancario por Mercado Pago.</p></div></div>
-            <div className="min-h-[200px] flex flex-col justify-center">
+            <div className="bg-[#f5f5f7] p-8 rounded-[32px] flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <ShieldCheck size={32} className="text-indigo-600" />
+                <div>
+                  <p className="text-lg font-bold">Pago Seguro</p>
+                  <p className="text-xs text-gray-500 font-medium tracking-wide">Cifrado de nivel bancario por Mercado Pago.</p>
+                </div>
+              </div>
+              <button onClick={() => setPreferenceId(null)} className="text-sm font-bold text-gray-500 hover:text-black hover:bg-gray-200 px-4 py-2 rounded-full transition-colors">Modificar datos</button>
+            </div>
+            <div className="min-h-[200px] flex flex-col justify-center relative">
               <MercadoPagoButton preferenceId={preferenceId} />
               <button onClick={simulateSuccess} className="mt-12 text-[10px] font-bold text-gray-300 uppercase tracking-[0.3em] hover:text-black transition-colors">Simular Éxito (Modo Demo)</button>
             </div>
