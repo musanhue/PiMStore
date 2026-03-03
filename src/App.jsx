@@ -1,4 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import Home from './pages/Home';
+import Novedades from './pages/Novedades';
+import Seguimiento from './pages/Seguimiento';
+import Devoluciones from './pages/Devoluciones';
+import Soporte from './pages/Soporte';
+import SobreNosotros from './pages/SobreNosotros';
 import {
   ShoppingCart, X, Plus, Minus, CreditCard, Truck, ShieldCheck,
   ArrowRight, Lock, Package, DollarSign, Trash2, Zap, Star,
@@ -129,8 +136,8 @@ const MercadoPagoButton = ({ preferenceId }) => {
 
 // --- APP PRINCIPAL ---
 export default function App() {
+  const location = useLocation();
   // Estados de Navegación y UI
-  const [view, setView] = useState('home');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -260,13 +267,13 @@ export default function App() {
       <nav className="fixed top-0 w-full bg-[#f5f5f7]/80 backdrop-blur-md z-[60] border-b border-gray-200/50">
         <div className="max-w-6xl mx-auto px-6 h-14 flex justify-between items-center">
           <div className="flex items-center gap-8">
-            <div onClick={() => setView('home')} className="flex items-center cursor-pointer group">
+            <Link to="/" className="flex items-center cursor-pointer group">
               <img src="/pimstore-extended-logo.svg" alt="PiMStore Logo" className="h-7 md:h-8 w-auto group-hover:opacity-80 transition-opacity" />
-            </div>
+            </Link>
             <div className="hidden md:flex gap-6 text-[12px] font-medium text-gray-500">
-              <button onClick={() => setView('home')} className={`hover:text-black transition-colors ${view === 'home' ? 'text-black font-bold' : ''}`}>Tienda</button>
-              <button onClick={() => setView('news')} className={`hover:text-black transition-colors ${view === 'news' ? 'text-black font-bold' : ''}`}>Novedades</button>
-              <button onClick={() => setView('tracking')} className={`hover:text-black transition-colors ${view === 'tracking' ? 'text-black font-bold' : ''}`}>Seguimiento</button>
+              <Link to="/" className={`hover:text-black transition-colors ${location.pathname === '/' ? 'text-black font-bold' : ''}`}>Tienda</Link>
+              <Link to="/novedades" className={`hover:text-black transition-colors ${location.pathname === '/novedades' ? 'text-black font-bold' : ''}`}>Novedades</Link>
+              <Link to="/seguimiento" className={`hover:text-black transition-colors ${location.pathname === '/seguimiento' ? 'text-black font-bold' : ''}`}>Seguimiento</Link>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -283,219 +290,25 @@ export default function App() {
 
       {/* RENDERIZADO DE VISTAS */}
 
-      {/* VISTA HOME */}
-      {view === 'home' && (
-        <>
-          <header className="pt-40 pb-20 px-6 max-w-6xl mx-auto text-center">
-            <h1 className="text-[48px] md:text-[80px] font-bold tracking-tight leading-[1.05] mb-6 animate-in slide-in-from-top-4 duration-1000">
-              Lo inusual, <br /> <span className="text-gray-400">bien pensado.</span>
-            </h1>
-            <p className="text-[19px] md:text-[24px] text-gray-500 font-medium max-w-2xl mx-auto leading-relaxed">
-              Descubre gadgets que transforman lo cotidiano.
-            </p>
-          </header>
+      {/* RENDERIZADO DE VISTAS */}
+      <Routes>
+        <Route path="/" element={<Home loading={loading} products={products} onSelectProduct={setSelectedProduct} />} />
+        <Route path="/novedades" element={<Novedades products={products} onSelectProduct={setSelectedProduct} />} />
+        <Route path="/seguimiento" element={<Seguimiento onSearch={async (trackId) => {
+          const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), where("orderNumber", "==", trackId), limit(1));
+          const s = await getDocs(q);
+          return s.empty ? 'not_found' : s.docs[0].data();
+        }} />} />
+        <Route path="/devoluciones" element={<Devoluciones />} />
+        <Route path="/soporte" element={<Soporte />} />
+        <Route path="/sobre-nosotros" element={<SobreNosotros />} />
+      </Routes>
 
-          <main className="max-w-6xl mx-auto px-6 pb-40">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-              {loading ? [1, 2, 3].map(i => <div key={i} className="h-[450px] bg-white rounded-[32px] animate-pulse" />) :
-                products.map(p => (
-                  <div key={p.id} onClick={() => setSelectedProduct(p)} className="group bg-white rounded-[32px] p-6 cursor-pointer transition-all duration-500 hover:shadow-2xl hover:shadow-black/5 flex flex-col h-full border border-transparent hover:border-gray-100">
-                    <div className="relative aspect-square mb-6 overflow-hidden rounded-[24px] bg-[#f5f5f7]">
-                      <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-1000 ease-out" />
-                      {p.stock <= 0 && <div className="absolute inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center"><span className="bg-black text-white px-4 py-1 rounded-full text-xs font-bold">Agotado</span></div>}
-                    </div>
-                    <div className="flex-grow px-2">
-                      <span className="text-[10px] font-bold text-indigo-500 uppercase tracking-[0.2em]">{p.category}</span>
-                      <h3 className="text-[20px] font-semibold text-black mt-2 leading-tight tracking-tight">{p.title}</h3>
-                      <p className="text-[22px] font-bold tracking-tight mt-4">${p.price.toLocaleString('es-CL')}</p>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </main>
-        </>
-      )}
 
-      {/* VISTAS INFORMATIVAS */}
-      {view === 'news' && (
-        <PageWrapper title="Novedades" onBack={() => setView('home')}>
-          <div className="grid gap-8">
-            {products.length === 0 ? <p className="text-center text-gray-400 py-10">Cargando novedades...</p> : products.slice(0, 3).map((p, i) => (
-              <div key={p.id} className="bg-white p-10 rounded-[40px] flex flex-col md:flex-row gap-8 items-center shadow-sm border border-gray-100 group hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setSelectedProduct(p)}>
-                <div className="h-64 w-full md:w-1/3 bg-[#f5f5f7] rounded-3xl overflow-hidden relative shrink-0">
-                  {i === 0 && <div className="absolute top-4 left-4 bg-indigo-600 text-white text-[10px] uppercase font-bold px-4 py-1.5 rounded-full z-10 tracking-widest shadow-lg">El Más Reciente</div>}
-                  <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
-                </div>
-                <div className="flex-1">
-                  <span className="text-indigo-600 font-bold text-[11px] uppercase tracking-[0.2em]">{p.category}</span>
-                  <h3 className="text-3xl font-bold mt-3 mb-4 tracking-tight leading-tight">{p.title}</h3>
-                  <p className="text-gray-500 mb-8 max-w-lg leading-relaxed">{p.description}</p>
-                  <button className="text-black font-bold flex items-center gap-2 group-hover:gap-4 transition-all uppercase text-xs tracking-widest"><Zap size={14} className="text-indigo-600" /> Ver Detalles <ArrowRight size={14} /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </PageWrapper>
-      )}
 
-      {view === 'returns' && (
-        <PageWrapper title="Política de Devoluciones (SERNAC)" onBack={() => setView('home')}>
-          <div className="bg-white p-12 rounded-[40px] shadow-sm border border-gray-100 prose prose-lg max-w-none text-gray-600 leading-relaxed">
-            <h3 className="text-3xl font-black mb-6 text-black tracking-tight">Tu Satisfacción Garantizada</h3>
-            <p className="mb-6">En <strong>PiMStore</strong> nuestro compromiso es entregarte tecnología y productos excepcionales. Operamos orgullosamente bajo un modelo de Dropshipping optimizado, lo que significa que gestionamos la logística directamente desde las bodegas de nuestros proveedores tecnológicos hacia la puerta de tu casa.</p>
 
-            <h4 className="text-xl font-bold mb-4 text-black mt-10">Derecho a Retracto (10 Días)</h4>
-            <p className="mb-6">De acuerdo a lo estipulado por la <strong>Ley Pro Consumidor (Art. 3 bis, Ley 19.496)</strong> de Chile liderada por el SERNAC, tienes el derecho a retractarte de tu compra dentro de los primeros <strong>10 días</strong> desde la recepción del producto. Para que este derecho sea válido, el producto debe estar sin uso, con todos sus sellos originales intactos y en perfecto estado.</p>
 
-            <h4 className="text-xl font-bold mb-4 text-black mt-10">Garantía Legal por Fallas</h4>
-            <p className="mb-8">Si tu producto presenta alguna falla de fábrica u origen, cuentas con <strong>6 meses de Garantía Legal</strong>. Como funcionamos vía Dropshipping internacional / nacional a través de la plataforma Dropi.cl, nosotros gestionaremos íntegramente el reclamo con el proveedor de manera transparente. Podrás elegir entre el cambio del producto o la devolución del dinero una vez el proveedor acredite la falla técnica.</p>
 
-            <div className="grid md:grid-cols-3 gap-6 my-12 text-black">
-              <div className="p-8 bg-[#f5f5f7] rounded-3xl border border-gray-100 hover:border-indigo-200 transition-colors"><CheckCircle2 className="mb-4 text-green-500 w-8 h-8" /><h4 className="text-lg font-bold">10 Días Retracto</h4><p className="text-sm text-gray-500 mt-2">Para devoluciones por arrepentimiento (producto sellado).</p></div>
-              <div className="p-8 bg-[#f5f5f7] rounded-3xl border border-gray-100 hover:border-indigo-200 transition-colors"><ShieldCheck className="mb-4 text-indigo-500 w-8 h-8" /><h4 className="text-lg font-bold">6 Meses Garantía</h4><p className="text-sm text-gray-500 mt-2">Frente a fallas de fábrica corroboradas por el servicio técnico.</p></div>
-              <div className="p-8 bg-[#f5f5f7] rounded-3xl border border-gray-100 hover:border-indigo-200 transition-colors"><Truck className="mb-4 text-blue-500 w-8 h-8" /><h4 className="text-lg font-bold">Gestión Logística</h4><p className="text-sm text-gray-500 mt-2">Acompañamiento 100% en el proceso ante proveedores.</p></div>
-            </div>
-
-            <div className="bg-indigo-50 p-8 rounded-3xl border border-indigo-100 mt-10">
-              <p className="text-indigo-900 font-medium">Para iniciar una solicitud de cambio o devolución, por favor contáctanos inmediatamente a:</p>
-              <a href="mailto:soporte@pimstore.cl" className="text-indigo-600 font-black text-lg hover:underline mt-2 inline-block">soporte@pimstore.cl</a>
-              <p className="text-sm text-indigo-700/70 mt-2">Asegúrate de incluir tu Número de Orden y fotografías del estado del producto.</p>
-            </div>
-          </div>
-        </PageWrapper>
-      )}
-
-      {view === 'tracking' && (
-        <PageWrapper title="Sigue tu orden" onBack={() => setView('home')}>
-          <div className="bg-white p-12 rounded-[40px] shadow-sm border border-gray-100 max-w-2xl mx-auto text-center">
-            <p className="text-gray-500 mb-8 font-medium">Ingresa el ID de orden que recibiste en tu correo de confirmación de compra.</p>
-            <div className="flex gap-4">
-              <input className="w-full bg-[#f5f5f7] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black font-mono text-center tracking-widest text-lg" placeholder="Ej: 20240218-4829" value={trackId} onChange={e => setTrackId(e.target.value)} />
-              <button onClick={async () => {
-                setTrackResult('loading');
-                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), where("orderNumber", "==", trackId), limit(1));
-                const s = await getDocs(q);
-                setTrackResult(s.empty ? 'not_found' : s.docs[0].data());
-              }} className="bg-black text-white px-8 rounded-2xl font-bold hover:bg-gray-800 transition-colors">Buscar</button>
-            </div>
-            {trackResult === 'not_found' && <div className="mt-8 p-4 bg-red-50 text-red-600 rounded-xl font-bold">Orden no encontrada</div>}
-
-            {typeof trackResult === 'object' && (
-              <div className="mt-8 p-8 bg-indigo-50 rounded-[32px] text-left flex justify-between items-center animate-in zoom-in-95 border border-indigo-100 shadow-sm">
-                <div>
-                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Estado PiMStore</p>
-                  <h3 className="text-3xl font-black text-indigo-600 capitalize mb-2">{trackResult.status}</h3>
-                  <p className="text-sm font-medium text-indigo-900/70">Monto: ${trackResult.total?.toLocaleString('es-CL')} / Artículos: {trackResult.items?.length}</p>
-                </div>
-                <Package size={48} className="text-indigo-200" />
-              </div>
-            )}
-
-            <div className="mt-12 pt-10 border-t border-gray-100">
-              <p className="text-gray-400 mb-6 text-sm">Si tu pedido ya fue procesado y despachado por nuestra bodega, puedes hacerle un seguimiento al milímetro directamente en el sistema de nuestro operador logístico asociado.</p>
-              <a href="https://dropi.cl/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-3 bg-indigo-600 text-white px-10 py-5 rounded-2xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
-                <Truck size={20} />
-                Rastrear Logística en Dropi.cl
-                <ArrowRight size={16} className="ml-2 opacity-70" />
-              </a>
-            </div>
-          </div>
-        </PageWrapper>
-      )}
-
-      {view === 'support' && (
-        <PageWrapper title="Soporte" onBack={() => setView('home')}>
-          <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110"></div>
-              <h3 className="text-2xl font-bold mb-8">Contacto Directo</h3>
-              <div className="space-y-8 text-black">
-                <div className="flex items-center gap-5">
-                  <div className="bg-indigo-50 p-4 rounded-2xl transition-colors group-hover:bg-indigo-100">
-                    <Mail className="text-indigo-600 w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Correo Electrónico</p>
-                    <a href="mailto:soporte@pimstore.cl" className="font-black text-lg hover:text-indigo-600 transition-colors">soporte@pimstore.cl</a>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-5">
-                    <div className="bg-[#25D366]/10 p-4 rounded-2xl">
-                      <Phone className="text-[#25D366] w-6 h-6" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Línea WhatsApp</p>
-                      <p className="font-black text-lg">+56 9 7523 2353</p>
-                    </div>
-                  </div>
-                  <a href="https://wa.me/56975232353?text=Hola%20PiMStore%2C%20necesito%20ayuda%20con..." target="_blank" rel="noopener noreferrer" className="mt-2 w-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center gap-3 py-4 rounded-2xl font-bold transition-colors shadow-lg shadow-[#25D366]/20">
-                    Chat Directo (Respuesta Rápida)
-                  </a>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100 flex flex-col justify-center text-center">
-              <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Clock size={32} className="text-gray-400" /></div>
-              <h4 className="text-xl font-bold mb-2">Horario de Atención</h4>
-              <p className="text-gray-500">Lunes a Viernes<br />09:00 - 18:00 hrs</p>
-            </div>
-          </div>
-        </PageWrapper>
-      )}
-
-      {view === 'about' && (
-        <PageWrapper title="Sobre Nosotros" onBack={() => setView('home')}>
-          <div className="max-w-4xl mx-auto">
-            {/* Hero Section */}
-            <div className="bg-white p-12 md:p-16 rounded-[40px] shadow-sm border border-gray-100 mb-8 relative overflow-hidden text-center">
-              <div className="mb-8 flex justify-center">
-                <img src="/pimstore-extended-logo.svg" alt="PiMStore Logo" className="h-12 w-auto" />
-              </div>
-              <h2 className="text-3xl md:text-5xl font-black tracking-tight mb-6 leading-tight">Redefiniendo el Comercio <br /><span className="text-indigo-600">Tecnológico en Chile</span></h2>
-              <p className="text-lg text-gray-500 leading-relaxed max-w-2xl mx-auto">
-                Bienvenidos a PiMStore. Nacimos de la premisa de que acceder a tecnología de punta, accesorios innovadores y gadgets disruptivos no debería ser complicado, ni lento.
-              </p>
-            </div>
-
-            {/* Grid de Valores */}
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
-              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100">
-                <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-                  <Globe className="text-indigo-600 w-8 h-8" />
-                </div>
-                <h3 className="text-2xl font-bold mb-4 tracking-tight">Vanguardia Global</h3>
-                <p className="text-gray-500 leading-relaxed">
-                  Buscamos por todo el globo las tendencias tecnológicas más calientes. A través de nuestro robusto modelo logístico, acortamos las distancias del mundo para poner directo en tus manos lo último del mercado.
-                </p>
-              </div>
-
-              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100">
-                <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-                  <ShieldCheck className="text-indigo-600 w-8 h-8" />
-                </div>
-                <h3 className="text-2xl font-bold mb-4 tracking-tight">Confianza Radical</h3>
-                <p className="text-gray-500 leading-relaxed">
-                  Operamos con la transparencia de las transacciones protegidas de MercadoPago y un sistema en la nube inquebrantable conectado directamente con nuestra red de proveedores Premium de Dropi.cl. Tu compra siempre está segura.
-                </p>
-              </div>
-            </div>
-
-            {/* Quote final */}
-            <div className="bg-indigo-600 text-white p-12 rounded-[40px] text-center relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-10">
-                <Star className="w-48 h-48" />
-              </div>
-              <p className="text-2xl md:text-3xl font-bold mb-6 italic min-w-[280px]">"No solo vendemos tecnología. Acercamos el futuro a tu rutina diaria."</p>
-              <div className="flex items-center justify-center gap-4">
-                <div className="h-[1px] w-12 bg-indigo-300"></div>
-                <p className="font-bold uppercase tracking-widest text-indigo-200 text-xs">Equipo Fundador</p>
-                <div className="h-[1px] w-12 bg-indigo-300"></div>
-              </div>
-            </div>
-          </div>
-        </PageWrapper>
-      )}
 
       {/* FOOTER */}
       <footer className="bg-white border-t border-gray-200 pt-20 pb-10 mt-auto">
@@ -508,13 +321,13 @@ export default function App() {
           </div>
           <div className="space-y-3">
             <p className="text-black font-bold uppercase tracking-widest text-[10px] mb-4">Cliente</p>
-            <button onClick={() => setView('tracking')} className="block hover:text-black">Seguimiento</button>
-            <button onClick={() => setView('returns')} className="block hover:text-black">Devoluciones</button>
-            <button onClick={() => setView('support')} className="block hover:text-black">Soporte</button>
+            <Link to="/seguimiento" className="block hover:text-black">Seguimiento</Link>
+            <Link to="/devoluciones" className="block hover:text-black">Devoluciones</Link>
+            <Link to="/soporte" className="block hover:text-black">Soporte</Link>
           </div>
           <div className="space-y-3">
             <p className="text-black font-bold uppercase tracking-widest text-[10px] mb-4">Empresa</p>
-            <button onClick={() => setView('about')} className="block hover:text-black">Sobre Nosotros</button>
+            <Link to="/sobre-nosotros" className="block hover:text-black">Sobre Nosotros</Link>
             <button onClick={() => setIsAdminOpen(true)} className="block hover:text-black flex items-center gap-2">
               {user && !user.isAnonymous && user.email !== 'musanhue@gmail.com' && (!userProfile || userProfile.role !== 'admin')
                 ? <><User size={12} /> Mi Perfil</>
