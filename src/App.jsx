@@ -140,9 +140,11 @@ export default function App() {
 
   // Estados de Datos
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
   const [products, setProducts] = useState([]);
   const [cart, setCart] = useState([]);
   const [orders, setOrders] = useState([]); // Para admin
+  const [customers, setCustomers] = useState([]); // Para admin
   const [loading, setLoading] = useState(true);
 
   // Estados Admin
@@ -183,6 +185,18 @@ export default function App() {
     init();
   }, []);
 
+  // Escuchar el perfil del usuario activo para saber su rol rápidamente
+  useEffect(() => {
+    if (user && !user.isAnonymous) {
+      const unsub = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), (docsnap) => {
+        if (docsnap.exists()) setUserProfile(docsnap.data());
+      });
+      return () => unsub();
+    } else {
+      setUserProfile(null);
+    }
+  }, [user]);
+
   // -- LOGICA DEL CARRITO --
   const addToCart = (product) => {
     setCart(prev => {
@@ -222,14 +236,19 @@ export default function App() {
     }
   };
 
-  // Cargar órdenes solo si se abre el panel admin
+  // Cargar órdenes y usuarios solo si se abre el panel admin
   useEffect(() => {
     if (isAdminOpen && user && !user.isAnonymous) {
       const qOrders = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), orderBy('createdAt', 'desc'));
-      const unsubscribe = onSnapshot(qOrders, (snap) => {
+      const qUsers = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'));
+
+      const unsubscribeOrders = onSnapshot(qOrders, (snap) => {
         setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
-      return () => unsubscribe();
+      const unsubscribeUsers = onSnapshot(qUsers, (snap) => {
+        setCustomers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
+      return () => { unsubscribeOrders(); unsubscribeUsers(); };
     }
   }, [isAdminOpen, user]);
 
@@ -337,7 +356,7 @@ export default function App() {
       {view === 'tracking' && (
         <PageWrapper title="Sigue tu orden" onBack={() => setView('home')}>
           <div className="bg-white p-12 rounded-[40px] shadow-sm border border-gray-100 max-w-2xl mx-auto text-center">
-            <p className="text-gray-500 mb-8 font-medium">Ingresa el ID de orden que recibiste en tu correo.</p>
+            <p className="text-gray-500 mb-8 font-medium">Ingresa el ID de orden que recibiste en tu correo de Dropi.cl o PiMStore.</p>
             <div className="flex gap-4">
               <input className="w-full bg-[#f5f5f7] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black" placeholder="Ej: 20240218-4829" value={trackId} onChange={e => setTrackId(e.target.value)} />
               <button onClick={async () => {
@@ -395,7 +414,11 @@ export default function App() {
           <div className="space-y-3">
             <p className="text-black font-bold uppercase tracking-widest text-[10px] mb-4">Empresa</p>
             <button onClick={() => setView('about')} className="block hover:text-black">Sobre Nosotros</button>
-            <button onClick={() => setIsAdminOpen(true)} className="block hover:text-black flex items-center gap-2">{user && !user.isAnonymous && user.email !== 'musanhue@gmail.com' ? <><User size={12} /> Mi Perfil</> : <><Lock size={12} /> {user && user.email === 'musanhue@gmail.com' ? 'Staff Panel' : 'Staff / Perfil'}</>}</button>
+            <button onClick={() => setIsAdminOpen(true)} className="block hover:text-black flex items-center gap-2">
+              {user && !user.isAnonymous && user.email !== 'musanhue@gmail.com' && (!userProfile || userProfile.role !== 'admin')
+                ? <><User size={12} /> Mi Perfil</>
+                : <><Lock size={12} /> {user && user.email === 'musanhue@gmail.com' ? 'Superadmin' : 'Staff / Perfil'}</>}
+            </button>
           </div>
         </div>
       </footer>
@@ -460,7 +483,7 @@ export default function App() {
       {completedOrder && <SuccessModal orderNum={completedOrder} onClose={() => setCompletedOrder(null)} />}
 
       {/* PANEL ADMIN STAFF */}
-      {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} user={user} auth={auth} products={products} orders={orders} newProd={newProd} setNewProd={setNewProd} handleAddProduct={handleAddProduct} deleteProduct={deleteProduct} tab={adminTab} setTab={setAdminTab} />}
+      {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} user={user} userProfile={userProfile} auth={auth} products={products} orders={orders} customers={customers} newProd={newProd} setNewProd={setNewProd} handleAddProduct={handleAddProduct} deleteProduct={deleteProduct} tab={adminTab} setTab={setAdminTab} />}
 
     </div>
   );
@@ -536,7 +559,7 @@ const AuthModal = ({ onClose, auth }) => {
   );
 };
 
-const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab }) => {
+const AdminPanel = ({ onClose, user, userProfile, auth, products, orders, customers, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab }) => {
   const handleLogin = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { } };
 
   if (!user || user.isAnonymous) {
@@ -553,7 +576,8 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
     );
   }
 
-  const isAdmin = user.email === 'musanhue@gmail.com';
+  const isSuperadmin = user.email === 'musanhue@gmail.com';
+  const isAdmin = isSuperadmin || (userProfile && userProfile.role === 'admin');
   const activeTab = !isAdmin && tab !== 'orders' ? 'orders' : tab;
   const userOrders = isAdmin ? orders : orders.filter(o => o.userId === user.uid);
 
@@ -566,13 +590,14 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
             {isAdmin && <button onClick={() => setTab('dashboard')} className={activeTab === 'dashboard' ? 'text-black' : ''}>Resumen</button>}
             {isAdmin && <button onClick={() => setTab('inventory')} className={activeTab === 'inventory' ? 'text-black' : ''}>Inventario</button>}
             <button onClick={() => setTab('orders')} className={activeTab === 'orders' ? 'text-black' : ''}>{isAdmin ? 'Pedidos' : 'Mis Compras'}</button>
+            {isSuperadmin && <button onClick={() => setTab('customers')} className={activeTab === 'customers' ? 'text-black' : ''}>Clientes</button>}
           </div>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
       </div>
       <div className="flex-1 overflow-y-auto p-10 max-w-7xl mx-auto w-full">
         <div className="flex justify-between items-center mb-10">
-          <div className="flex gap-4 items-center"><div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center font-bold text-indigo-600">{user.email[0].toUpperCase()}</div><div><p className="text-xs font-bold text-gray-400 uppercase">{isAdmin ? 'Admin' : 'Cliente'}</p><p className="font-bold">{user.email}</p></div></div>
+          <div className="flex gap-4 items-center"><div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center font-bold text-indigo-600">{user.email[0].toUpperCase()}</div><div><p className="text-xs font-bold text-gray-400 uppercase">{isSuperadmin ? 'Superadmin' : isAdmin ? 'Admin' : 'Cliente'}</p><p className="font-bold">{user.email}</p></div></div>
           <button onClick={() => { signOut(auth); onClose(); }} className="text-red-500 font-bold bg-red-50 px-6 py-2 rounded-xl text-sm hover:bg-red-100 transition-colors">Cerrar Sesión</button>
         </div>
 
@@ -619,6 +644,16 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
                 <div className="text-right"><span className="text-2xl font-black">${o.total?.toLocaleString('es-CL')}</span><p className="text-[10px] text-gray-400 font-bold uppercase">{o.items?.length} items</p></div>
               </div>
             ))}
+          </div>
+        )}
+
+        {activeTab === 'customers' && isSuperadmin && (
+          <div className="space-y-6">
+            <h3 className="text-2xl font-bold mb-6">Base de Clientes</h3>
+            <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden">
+              <table className="w-full text-left"><thead className="bg-[#f5f5f7] text-[10px] font-bold text-gray-400 uppercase"><tr><th className="p-6">Email</th><th className="p-6">RUT</th><th className="p-6">Nombre y Dirección</th><th className="p-6 text-center">Rol</th><th className="p-6 text-center">Consentimiento Marketing</th></tr></thead>
+                <tbody className="divide-y divide-gray-50">{customers.map(c => (<tr key={c.id}><td className="p-6 font-bold">{c.email}</td><td className="p-6 text-sm">{c.savedAddress?.rut || 'N/A'}</td><td className="p-6">{c.savedAddress ? <><p className="font-bold mb-1 text-sm">{c.savedAddress.nombre}</p><p className="text-xs text-gray-500 max-w-[250px]">{c.savedAddress.calle} {c.savedAddress.numero} {c.savedAddress.depto ? `Dpto ${c.savedAddress.depto}` : ''}, {c.savedAddress.comuna}, {c.savedAddress.region}</p></> : <span className="text-xs text-gray-400 italic">Sin dirección guardada</span>}</td><td className="p-6 text-center">{c.email === 'musanhue@gmail.com' ? <span className="text-gray-400 text-xs italic font-semibold">Superadmin</span> : <select value={c.role || 'cliente'} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', c.id), { role: e.target.value })} className="bg-gray-100 p-2 rounded-xl text-xs outline-none cursor-pointer font-bold uppercase tracking-widest text-indigo-900 border border-gray-200"><option value="cliente">Cliente</option><option value="admin">Administrador</option></select>}</td><td className="p-6 text-center">{c.consentimiento ? <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest inline-block">PERMITIDO</span> : <span className="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest inline-block">DENEGADO</span>}</td></tr>))}</tbody></table>
+            </div>
           </div>
         )}
       </div>
