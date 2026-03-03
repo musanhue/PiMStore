@@ -339,16 +339,28 @@ export default function App() {
       )}
 
       {view === 'returns' && (
-        <PageWrapper title="Devoluciones" onBack={() => setView('home')}>
-          <div className="bg-white p-12 rounded-[40px] shadow-sm border border-gray-100 prose prose-lg max-w-none">
-            <h3 className="text-2xl font-bold mb-4">Garantía de Satisfacción</h3>
-            <p>En PiMStore, queremos que ames tu tecnología. Si no es así, tienes 30 días para devolverlo.</p>
-            <div className="grid md:grid-cols-3 gap-6 my-10">
-              <div className="p-6 bg-[#f5f5f7] rounded-3xl"><CheckCircle2 className="mb-4 text-green-500" /><h4 className="font-bold">30 Días</h4><p className="text-sm text-gray-500">Para cambios o devoluciones desde la recepción.</p></div>
-              <div className="p-6 bg-[#f5f5f7] rounded-3xl"><Package className="mb-4 text-indigo-500" /><h4 className="font-bold">Empaque Original</h4><p className="text-sm text-gray-500">El producto debe estar sellado y sin uso.</p></div>
-              <div className="p-6 bg-[#f5f5f7] rounded-3xl"><Truck className="mb-4 text-blue-500" /><h4 className="font-bold">Retiro Gratuito</h4><p className="text-sm text-gray-500">Si es falla técnica, nosotros pagamos el envío.</p></div>
+        <PageWrapper title="Política de Devoluciones (SERNAC)" onBack={() => setView('home')}>
+          <div className="bg-white p-12 rounded-[40px] shadow-sm border border-gray-100 prose prose-lg max-w-none text-gray-600 leading-relaxed">
+            <h3 className="text-3xl font-black mb-6 text-black tracking-tight">Tu Satisfacción Garantizada</h3>
+            <p className="mb-6">En <strong>PiMStore</strong> nuestro compromiso es entregarte tecnología y productos excepcionales. Operamos orgullosamente bajo un modelo de Dropshipping optimizado, lo que significa que gestionamos la logística directamente desde las bodegas de nuestros proveedores tecnológicos hacia la puerta de tu casa.</p>
+
+            <h4 className="text-xl font-bold mb-4 text-black mt-10">Derecho a Retracto (10 Días)</h4>
+            <p className="mb-6">De acuerdo a lo estipulado por la <strong>Ley Pro Consumidor (Art. 3 bis, Ley 19.496)</strong> de Chile liderada por el SERNAC, tienes el derecho a retractarte de tu compra dentro de los primeros <strong>10 días</strong> desde la recepción del producto. Para que este derecho sea válido, el producto debe estar sin uso, con todos sus sellos originales intactos y en perfecto estado.</p>
+
+            <h4 className="text-xl font-bold mb-4 text-black mt-10">Garantía Legal por Fallas</h4>
+            <p className="mb-8">Si tu producto presenta alguna falla de fábrica u origen, cuentas con <strong>6 meses de Garantía Legal</strong>. Como funcionamos vía Dropshipping internacional / nacional a través de la plataforma Dropi.cl, nosotros gestionaremos íntegramente el reclamo con el proveedor de manera transparente. Podrás elegir entre el cambio del producto o la devolución del dinero una vez el proveedor acredite la falla técnica.</p>
+
+            <div className="grid md:grid-cols-3 gap-6 my-12 text-black">
+              <div className="p-8 bg-[#f5f5f7] rounded-3xl border border-gray-100 hover:border-indigo-200 transition-colors"><CheckCircle2 className="mb-4 text-green-500 w-8 h-8" /><h4 className="text-lg font-bold">10 Días Retracto</h4><p className="text-sm text-gray-500 mt-2">Para devoluciones por arrepentimiento (producto sellado).</p></div>
+              <div className="p-8 bg-[#f5f5f7] rounded-3xl border border-gray-100 hover:border-indigo-200 transition-colors"><ShieldCheck className="mb-4 text-indigo-500 w-8 h-8" /><h4 className="text-lg font-bold">6 Meses Garantía</h4><p className="text-sm text-gray-500 mt-2">Frente a fallas de fábrica corroboradas por el servicio técnico.</p></div>
+              <div className="p-8 bg-[#f5f5f7] rounded-3xl border border-gray-100 hover:border-indigo-200 transition-colors"><Truck className="mb-4 text-blue-500 w-8 h-8" /><h4 className="text-lg font-bold">Gestión Logística</h4><p className="text-sm text-gray-500 mt-2">Acompañamiento 100% en el proceso ante proveedores.</p></div>
             </div>
-            <p>Escríbenos a <strong>soporte@pimstore.cl</strong> con tu número de orden para comenzar.</p>
+
+            <div className="bg-indigo-50 p-8 rounded-3xl border border-indigo-100 mt-10">
+              <p className="text-indigo-900 font-medium">Para iniciar una solicitud de cambio o devolución, por favor contáctanos inmediatamente a:</p>
+              <a href="mailto:soporte@pimstore.cl" className="text-indigo-600 font-black text-lg hover:underline mt-2 inline-block">soporte@pimstore.cl</a>
+              <p className="text-sm text-indigo-700/70 mt-2">Asegúrate de incluir tu Número de Orden y fotografías del estado del producto.</p>
+            </div>
           </div>
         </PageWrapper>
       )}
@@ -356,23 +368,37 @@ export default function App() {
       {view === 'tracking' && (
         <PageWrapper title="Sigue tu orden" onBack={() => setView('home')}>
           <div className="bg-white p-12 rounded-[40px] shadow-sm border border-gray-100 max-w-2xl mx-auto text-center">
-            <p className="text-gray-500 mb-8 font-medium">Ingresa el ID de orden que recibiste en tu correo de Dropi.cl o PiMStore.</p>
+            <p className="text-gray-500 mb-8 font-medium">Ingresa el ID de orden que recibiste en tu correo de confirmación de compra.</p>
             <div className="flex gap-4">
-              <input className="w-full bg-[#f5f5f7] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black" placeholder="Ej: 20240218-4829" value={trackId} onChange={e => setTrackId(e.target.value)} />
+              <input className="w-full bg-[#f5f5f7] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black font-mono text-center tracking-widest text-lg" placeholder="Ej: 20240218-4829" value={trackId} onChange={e => setTrackId(e.target.value)} />
               <button onClick={async () => {
                 setTrackResult('loading');
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), where("orderNumber", "==", trackId), limit(1));
                 const s = await getDocs(q);
                 setTrackResult(s.empty ? 'not_found' : s.docs[0].data());
-              }} className="bg-indigo-600 text-white px-8 rounded-2xl font-bold hover:bg-indigo-700 transition-colors">Buscar</button>
+              }} className="bg-black text-white px-8 rounded-2xl font-bold hover:bg-gray-800 transition-colors">Buscar</button>
             </div>
             {trackResult === 'not_found' && <div className="mt-8 p-4 bg-red-50 text-red-600 rounded-xl font-bold">Orden no encontrada</div>}
+
             {typeof trackResult === 'object' && (
-              <div className="mt-8 p-8 bg-indigo-50 rounded-[32px] text-left flex justify-between items-center animate-in zoom-in-95">
-                <div><p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Estado</p><h3 className="text-3xl font-black text-indigo-600 capitalize">{trackResult.status}</h3></div>
+              <div className="mt-8 p-8 bg-indigo-50 rounded-[32px] text-left flex justify-between items-center animate-in zoom-in-95 border border-indigo-100 shadow-sm">
+                <div>
+                  <p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">Estado PiMStore</p>
+                  <h3 className="text-3xl font-black text-indigo-600 capitalize mb-2">{trackResult.status}</h3>
+                  <p className="text-sm font-medium text-indigo-900/70">Monto: ${trackResult.total?.toLocaleString('es-CL')} / Artículos: {trackResult.items?.length}</p>
+                </div>
                 <Package size={48} className="text-indigo-200" />
               </div>
             )}
+
+            <div className="mt-12 pt-10 border-t border-gray-100">
+              <p className="text-gray-400 mb-6 text-sm">Si tu pedido ya fue procesado y despachado por nuestra bodega, puedes hacerle un seguimiento al milímetro directamente en el sistema de nuestro operador logístico asociado.</p>
+              <a href="https://dropi.cl/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-3 bg-indigo-600 text-white px-10 py-5 rounded-2xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200">
+                <Truck size={20} />
+                Rastrear Logística en Dropi.cl
+                <ArrowRight size={16} className="ml-2 opacity-70" />
+              </a>
+            </div>
           </div>
         </PageWrapper>
       )}
@@ -380,17 +406,92 @@ export default function App() {
       {view === 'support' && (
         <PageWrapper title="Soporte" onBack={() => setView('home')}>
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100">
-              <h3 className="text-2xl font-bold mb-6">Contacto Directo</h3>
-              <div className="space-y-6">
-                <div className="flex items-center gap-4"><div className="bg-[#f5f5f7] p-3 rounded-xl"><Mail className="text-indigo-600" /></div><div><p className="text-xs font-bold text-gray-400 uppercase">Email</p><p className="font-bold">soporte@pimstore.cl</p></div></div>
-                <div className="flex items-center gap-4"><div className="bg-[#f5f5f7] p-3 rounded-xl"><Phone className="text-indigo-600" /></div><div><p className="text-xs font-bold text-gray-400 uppercase">WhatsApp</p><p className="font-bold">+56 9 7523 2353</p></div></div>
+            <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110"></div>
+              <h3 className="text-2xl font-bold mb-8">Contacto Directo</h3>
+              <div className="space-y-8 text-black">
+                <div className="flex items-center gap-5">
+                  <div className="bg-indigo-50 p-4 rounded-2xl transition-colors group-hover:bg-indigo-100">
+                    <Mail className="text-indigo-600 w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Correo Electrónico</p>
+                    <a href="mailto:soporte@pimstore.cl" className="font-black text-lg hover:text-indigo-600 transition-colors">soporte@pimstore.cl</a>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-5">
+                    <div className="bg-[#25D366]/10 p-4 rounded-2xl">
+                      <Phone className="text-[#25D366] w-6 h-6" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Línea WhatsApp</p>
+                      <p className="font-black text-lg">+56 9 7523 2353</p>
+                    </div>
+                  </div>
+                  <a href="https://wa.me/56975232353?text=Hola%20PiMStore%2C%20necesito%20ayuda%20con..." target="_blank" rel="noopener noreferrer" className="mt-2 w-full bg-[#25D366] hover:bg-[#20bd5a] text-white flex items-center justify-center gap-3 py-4 rounded-2xl font-bold transition-colors shadow-lg shadow-[#25D366]/20">
+                    Chat Directo (Respuesta Rápida)
+                  </a>
+                </div>
               </div>
             </div>
             <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100 flex flex-col justify-center text-center">
               <div className="bg-gray-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"><Clock size={32} className="text-gray-400" /></div>
               <h4 className="text-xl font-bold mb-2">Horario de Atención</h4>
               <p className="text-gray-500">Lunes a Viernes<br />09:00 - 18:00 hrs</p>
+            </div>
+          </div>
+        </PageWrapper>
+      )}
+
+      {view === 'about' && (
+        <PageWrapper title="Sobre Nosotros" onBack={() => setView('home')}>
+          <div className="max-w-4xl mx-auto">
+            {/* Hero Section */}
+            <div className="bg-white p-12 md:p-16 rounded-[40px] shadow-sm border border-gray-100 mb-8 relative overflow-hidden text-center">
+              <div className="mb-8 flex justify-center">
+                <img src="/pimstore-extended-logo.svg" alt="PiMStore Logo" className="h-12 w-auto" />
+              </div>
+              <h2 className="text-3xl md:text-5xl font-black tracking-tight mb-6 leading-tight">Redefiniendo el Comercio <br /><span className="text-indigo-600">Tecnológico en Chile</span></h2>
+              <p className="text-lg text-gray-500 leading-relaxed max-w-2xl mx-auto">
+                Bienvenidos a PiMStore. Nacimos de la premisa de que acceder a tecnología de punta, accesorios innovadores y gadgets disruptivos no debería ser complicado, ni lento.
+              </p>
+            </div>
+
+            {/* Grid de Valores */}
+            <div className="grid md:grid-cols-2 gap-8 mb-8">
+              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100">
+                <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+                  <Globe className="text-indigo-600 w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-4 tracking-tight">Vanguardia Global</h3>
+                <p className="text-gray-500 leading-relaxed">
+                  Buscamos por todo el globo las tendencias tecnológicas más calientes. A través de nuestro robusto modelo logístico, acortamos las distancias del mundo para poner directo en tus manos lo último del mercado.
+                </p>
+              </div>
+
+              <div className="bg-white p-10 rounded-[40px] shadow-sm border border-gray-100">
+                <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
+                  <ShieldCheck className="text-indigo-600 w-8 h-8" />
+                </div>
+                <h3 className="text-2xl font-bold mb-4 tracking-tight">Confianza Radical</h3>
+                <p className="text-gray-500 leading-relaxed">
+                  Operamos con la transparencia de las transacciones protegidas de MercadoPago y un sistema en la nube inquebrantable conectado directamente con nuestra red de proveedores Premium de Dropi.cl. Tu compra siempre está segura.
+                </p>
+              </div>
+            </div>
+
+            {/* Quote final */}
+            <div className="bg-indigo-600 text-white p-12 rounded-[40px] text-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-10">
+                <Star className="w-48 h-48" />
+              </div>
+              <p className="text-2xl md:text-3xl font-bold mb-6 italic min-w-[280px]">"No solo vendemos tecnología. Acercamos el futuro a tu rutina diaria."</p>
+              <div className="flex items-center justify-center gap-4">
+                <div className="h-[1px] w-12 bg-indigo-300"></div>
+                <p className="font-bold uppercase tracking-widest text-indigo-200 text-xs">Equipo Fundador</p>
+                <div className="h-[1px] w-12 bg-indigo-300"></div>
+              </div>
             </div>
           </div>
         </PageWrapper>
