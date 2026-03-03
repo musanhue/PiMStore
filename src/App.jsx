@@ -6,12 +6,17 @@ import Seguimiento from './pages/Seguimiento';
 import Devoluciones from './pages/Devoluciones';
 import Soporte from './pages/Soporte';
 import SobreNosotros from './pages/SobreNosotros';
+import PerfilDatos from './pages/PerfilDatos';
+import PerfilPedidos from './pages/PerfilPedidos';
+import PerfilDirecciones from './pages/PerfilDirecciones';
+import ProductoDetalle from './pages/ProductoDetalle';
 import {
   ShoppingCart, X, Plus, Minus, CreditCard, Truck, ShieldCheck,
   ArrowRight, Lock, Package, DollarSign, Trash2, Zap, Star,
   CheckCircle2, AlertCircle, ChevronRight, Search, Mail, Phone,
   MapPin, Globe, ArrowLeft, LogIn, LogOut, LayoutGrid, Clock,
-  PlusCircle, ListFilter, BarChart3, Settings, Trash, User, UserPlus
+  PlusCircle, ListFilter, BarChart3, Settings, Trash, User, UserPlus,
+  ChevronDown
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import {
@@ -96,7 +101,8 @@ const validateEmail = (email) => {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 };
 
-const regionesYComunas = [
+// Export locations so PerfilDirecciones can use them
+export const regionesYComunas = [
   { region: "Arica y Parinacota", comunas: ["Arica", "Camarones", "Putre", "General Lagos"] },
   { region: "Tarapacá", comunas: ["Iquique", "Alto Hospicio", "Pozo Almonte", "Camiña", "Colchane", "Huara", "Pica"] },
   { region: "Antofagasta", comunas: ["Antofagasta", "Mejillones", "Sierra Gorda", "Taltal", "Calama", "Ollagüe", "San Pedro de Atacama", "Tocopilla", "María Elena"] },
@@ -142,8 +148,9 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [completedOrder, setCompletedOrder] = useState(null);
+  const userMenuRef = useRef(null);
 
   // Estados de Datos
   const [user, setUser] = useState(null);
@@ -190,6 +197,17 @@ export default function App() {
       return () => unsubscribeProds();
     };
     init();
+
+    // Close user menu on outside click
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
   }, []);
 
   // Escuchar el perfil del usuario activo para saber su rol rápidamente
@@ -205,18 +223,48 @@ export default function App() {
   }, [user]);
 
   // -- LOGICA DEL CARRITO --
-  const addToCart = (product) => {
+  const addToCart = (product, availableStock) => {
+    // If availableStock is undefined (e.g., from old calls), calculate it
+    const stockMostrado = availableStock !== undefined ? availableStock : Math.max(0, Math.round((product.stock || 0) * 0.8));
+
     setCart(prev => {
       const existing = prev.find(i => i.id === product.id);
-      if (existing) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+
+      if (existing) {
+        if (existing.quantity >= stockMostrado) {
+          alert(`Solo puedes añadir hasta ${stockMostrado} unidades de este producto.`);
+          return prev;
+        }
+        return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
+      }
+
+      if (stockMostrado <= 0) {
+        alert("Este producto está agotado.");
+        return prev;
+      }
+
       return [...prev, { ...product, quantity: 1 }];
     });
     setIsCartOpen(true);
-    setSelectedProduct(null);
   };
 
-  const updateQuantity = (id, delta) => {
-    setCart(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i));
+  const updateQuantity = (id, delta, productRef) => {
+    // Need product info to check stock limit. First find item in cart.
+    setCart(prev => {
+      const item = prev.find(i => i.id === id);
+      if (!item) return prev;
+
+      // Find product from master products list if possible to get true current stock
+      const masterProduct = products.find(p => p.id === id) || item;
+      const stockMostrado = Math.max(0, Math.round((masterProduct.stock || 0) * 0.8));
+
+      const newQuant = item.quantity + delta;
+      if (newQuant > stockMostrado) {
+        alert(`Stock máximo local alcanzado (${stockMostrado} unidades).`);
+        return prev;
+      }
+      return prev.map(i => i.id === id ? { ...i, quantity: Math.max(1, newQuant) } : i);
+    });
   };
 
   const removeFromCart = (id) => setCart(prev => prev.filter(i => i.id !== id));
@@ -277,9 +325,38 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={() => user && !user.isAnonymous ? alert(`Hola ${user.displayName || user.email}`) : setIsAuthModalOpen(true)} className="hover:text-black text-gray-500 transition-colors">
-              {user && !user.isAnonymous ? <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">{user.email[0].toUpperCase()}</div> : <User size={20} />}
-            </button>
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => user && !user.isAnonymous ? setIsUserMenuOpen(!isUserMenuOpen) : setIsAuthModalOpen(true)}
+                className="hover:text-black text-gray-500 transition-colors flex items-center gap-2"
+              >
+                {user && !user.isAnonymous ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold">
+                      {user.email[0].toUpperCase()}
+                    </div>
+                    <ChevronDown size={14} className={`transition-transform duration-300 ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                ) : (
+                  <User size={20} />
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {isUserMenuOpen && user && !user.isAnonymous && (
+                <div className="absolute right-0 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 animate-in slide-in-from-top-2 fade-in duration-200 z-[100]">
+                  <div className="px-4 py-3 border-b border-gray-50 mb-2">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Conectado como</p>
+                    <p className="text-sm font-bold text-indigo-900 truncate">{user.email}</p>
+                  </div>
+                  <Link to="/perfil/datos" onClick={() => setIsUserMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-[#f5f5f7] transition-colors"><User size={16} className="text-gray-400" /> Mis Datos</Link>
+                  <Link to="/perfil/pedidos" onClick={() => setIsUserMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-[#f5f5f7] transition-colors"><Package size={16} className="text-gray-400" /> Mis Pedidos</Link>
+                  <Link to="/perfil/direcciones" onClick={() => setIsUserMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-[#f5f5f7] transition-colors"><MapPin size={16} className="text-gray-400" /> Mis Direcciones</Link>
+                  <div className="h-[1px] bg-gray-50 my-2"></div>
+                  <button onClick={() => { signOut(auth); setIsUserMenuOpen(false); }} className="w-full text-left flex items-center gap-3 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors"><LogOut size={16} /> Cerrar Sesión</button>
+                </div>
+              )}
+            </div>
             <button onClick={() => setIsCartOpen(true)} className="relative p-2 hover:bg-gray-100 rounded-full transition-all">
               <ShoppingCart size={18} strokeWidth={2} />
               {cart.length > 0 && <span className="absolute top-0 right-0 h-4 w-4 bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center rounded-full text-white ring-2 ring-[#f5f5f7]">{cart.reduce((a, b) => a + b.quantity, 0)}</span>}
@@ -292,8 +369,8 @@ export default function App() {
 
       {/* RENDERIZADO DE VISTAS */}
       <Routes>
-        <Route path="/" element={<Home loading={loading} products={products} onSelectProduct={setSelectedProduct} />} />
-        <Route path="/novedades" element={<Novedades products={products} onSelectProduct={setSelectedProduct} />} />
+        <Route path="/" element={<Home loading={loading} products={products} />} />
+        <Route path="/novedades" element={<Novedades products={products} />} />
         <Route path="/seguimiento" element={<Seguimiento onSearch={async (trackId) => {
           const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), where("orderNumber", "==", trackId), limit(1));
           const s = await getDocs(q);
@@ -302,6 +379,10 @@ export default function App() {
         <Route path="/devoluciones" element={<Devoluciones />} />
         <Route path="/soporte" element={<Soporte />} />
         <Route path="/sobre-nosotros" element={<SobreNosotros />} />
+        <Route path="/perfil/datos" element={<PerfilDatos user={user} appId={appId} />} />
+        <Route path="/perfil/pedidos" element={<PerfilPedidos user={user} appId={appId} />} />
+        <Route path="/perfil/direcciones" element={<PerfilDirecciones user={user} appId={appId} />} />
+        <Route path="/producto/:sku" element={<ProductoDetalle addToCart={addToCart} appId={appId} />} />
       </Routes>
 
 
@@ -340,24 +421,6 @@ export default function App() {
       {/* MODAL AUTH CLIENTES */}
       {isAuthModalOpen && (
         <AuthModal onClose={() => setIsAuthModalOpen(false)} auth={auth} />
-      )}
-
-      {/* MODAL DETALLE PRODUCTO */}
-      {selectedProduct && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 animate-in fade-in duration-300">
-          <div className="absolute inset-0 bg-white/90 backdrop-blur-xl" onClick={() => setSelectedProduct(null)} />
-          <div className="relative bg-white rounded-[48px] w-full max-w-5xl h-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col md:flex-row border border-gray-100">
-            <button onClick={() => setSelectedProduct(null)} className="absolute top-6 right-6 z-10 bg-gray-100 p-2 rounded-full hover:bg-black hover:text-white transition-all"><X size={24} /></button>
-            <div className="md:w-3/5 bg-[#f5f5f7] flex items-center justify-center p-12"><img src={selectedProduct.image} className="w-full h-full object-contain" /></div>
-            <div className="md:w-2/5 p-10 md:p-16 flex flex-col overflow-y-auto">
-              <span className="text-[12px] font-bold text-indigo-500 uppercase mb-4 tracking-widest">{selectedProduct.category}</span>
-              <h2 className="text-[36px] font-bold leading-tight mb-4">{selectedProduct.title}</h2>
-              <p className="text-[28px] font-bold mb-8">${selectedProduct.price.toLocaleString('es-CL')}</p>
-              <div className="space-y-6 flex-grow"><p className="text-[17px] text-gray-600 leading-relaxed">{selectedProduct.description}</p></div>
-              <button onClick={() => addToCart(selectedProduct)} className="w-full bg-indigo-600 text-white py-5 rounded-full font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl">Añadir a la bolsa</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* CARRITO */}
@@ -473,8 +536,37 @@ const AuthModal = ({ onClose, auth }) => {
   );
 };
 
-const AdminPanel = ({ onClose, user, userProfile, auth, products, orders, customers, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab }) => {
+const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, orders, customers, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab }) => {
+  const [isScraping, setIsScraping] = useState(false);
+  const [dropiUrlInput, setDropiUrlInput] = useState('');
+
   const handleLogin = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { } };
+
+  const handleScrapeDropi = async () => {
+    if (!dropiUrlInput) return alert("Ingresa un enlace de Dropi primero.");
+    setIsScraping(true);
+    try {
+      const scrapeDropiProduct = httpsCallable(functions, 'scrapeDropiProduct');
+      const result = await scrapeDropiProduct({ url: dropiUrlInput });
+      const data = result.data;
+      if (data.success) {
+        setNewProd(prev => ({
+          ...prev,
+          title: data.title || prev.title,
+          description: data.description || prev.description,
+          image: data.images?.length > 0 ? data.images[0] : prev.image,
+          dropiSku: data.dropiSku || prev.dropiSku
+        }));
+        setDropiUrlInput('');
+        alert("Datos extraídos correctamente. ¡Revisa y completa el precio!");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("No se pudo extraer la información automáticamente. " + error.message);
+    } finally {
+      setIsScraping(false);
+    }
+  };
 
   if (!user || user.isAnonymous) {
     return (
@@ -527,7 +619,36 @@ const AdminPanel = ({ onClose, user, userProfile, auth, products, orders, custom
           <div className="space-y-10">
             <div className="bg-white p-10 rounded-[32px] border border-gray-100">
               <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><PlusCircle size={20} /> Nuevo Item</h3>
-              <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+              {/* Scraper Section */}
+              <div className="mb-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
+                <label className="block text-xs font-bold text-indigo-900 uppercase tracking-widest mb-2 flex items-center gap-2">
+                  <Zap size={14} /> Auto-completar desde Dropi.cl
+                </label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    className="flex-1 bg-white p-3 rounded-xl border border-indigo-200 outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    placeholder="Ej: https://app.dropi.cl/dashboard/product-details/10638/..."
+                    value={dropiUrlInput}
+                    onChange={(e) => setDropiUrlInput(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleScrapeDropi}
+                    disabled={isScraping || !dropiUrlInput}
+                    className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isScraping ? 'Extrayendo...' : 'Extraer Datos'}
+                  </button>
+                </div>
+                <p className="text-xs text-indigo-700/70 mt-3 font-medium">Pega el link del producto y extraeremos el nombre, imágenes y descripción automáticamente.</p>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                handleAddProduct(e);
+                setDropiUrlInput('');
+              }} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <input placeholder="Título" value={newProd.title} onChange={e => setNewProd({ ...newProd, title: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="Precio" type="number" value={newProd.price} onChange={e => setNewProd({ ...newProd, price: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="Categoría" value={newProd.category} onChange={e => setNewProd({ ...newProd, category: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />

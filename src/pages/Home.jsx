@@ -1,6 +1,7 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
-export default function Home({ loading, products, onSelectProduct }) {
+export default function Home({ loading, products }) {
     return (
         <>
             <header className="pt-40 pb-20 px-6 max-w-6xl mx-auto text-center">
@@ -16,10 +17,10 @@ export default function Home({ loading, products, onSelectProduct }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                     {loading ? [1, 2, 3].map(i => <div key={i} className="h-[450px] bg-white rounded-[32px] animate-pulse" />) :
                         products.map((p, i) => (
-                            <div
+                            <Link
+                                to={`/producto/${p.dropiSku || p.id}`}
                                 key={p.id}
-                                onClick={() => onSelectProduct(p)}
-                                className="bg-white rounded-[40px] p-6 shadow-sm border border-gray-100 group cursor-pointer hover:shadow-2xl hover:border-transparent transition-all duration-500 hover:-translate-y-2 animate-in slide-in-from-bottom"
+                                className="block bg-white rounded-[40px] p-6 shadow-sm border border-gray-100 group cursor-pointer hover:shadow-2xl hover:border-transparent transition-all duration-500 hover:-translate-y-2 animate-in slide-in-from-bottom"
                                 style={{ animationDelay: `${i * 100}ms` }}
                             >
                                 <div className="h-64 bg-[#f5f5f7] rounded-[32px] mb-6 overflow-hidden relative">
@@ -30,7 +31,7 @@ export default function Home({ loading, products, onSelectProduct }) {
                                     <h3 className="text-2xl font-bold mb-2 tracking-tight">{p.title}</h3>
                                     <p className="text-[22px] font-bold tracking-tight mt-4">${p.price.toLocaleString('es-CL')}</p>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                 </div>
             </main>

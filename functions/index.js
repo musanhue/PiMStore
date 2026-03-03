@@ -10,6 +10,64 @@ const DROPI_API_KEY = "PENDIENTE_DE_SOPORTE"; // Pega tu clave de Dropi aquí cu
 const DROPI_URL = "https://api.dropi.cl/api/v1/orders";
 // Token de PRUEBA de Mercado Pago
 const client = new MercadoPagoConfig({ accessToken: 'TEST-2437783845936267-021801-89b482c6c28daecf5e5ad6a603c34bd4-3204973335' });
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+exports.scrapeDropiProduct = onCall(async (request) => {
+  try {
+    const { url } = request.data;
+    if (!url || !url.includes('dropi')) {
+      throw new HttpsError('invalid-argument', 'URL inválida de Dropi');
+    }
+
+    // Usando una cabecera para simular un navegador moderno y saltar bloqueos simples
+    const { data } = await axios.get(url, {
+      headers: {
+        'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-CL,es;q=0.9,en-US;q=0.8,en;q=0.7',
+      }
+    });
+
+    const $ = cheerio.load(data);
+
+    // Selectors to tune based on Dropi's actual DOM structure
+    // Dropi product pages usually have a title, some price, and images in a gallery.
+
+    // We try generic selectors that might work, or specific ones if known.
+    // For a generic approach based on standard e-commerce:
+    const title = $('h1').first().text().trim() || $('title').text().replace('- Dropi', '').trim();
+
+    const description = $('.description, #tab-description, .product-details').first().text().replace(/\s+/g, ' ').trim() || '';
+
+    // Images: look for main product image or gallery
+    const images = [];
+    $('img').each((i, el) => {
+      const src = $(el).attr('src') || $(el).attr('data-src');
+      // basic filter to avoid 1x1 pixels or logos
+      if (src && !src.includes('logo') && !src.includes('icon') && src.startsWith('http')) {
+        images.push(src);
+      }
+    });
+
+    // Try to extract an SKU from URL or DOM
+    let dropiSku = '';
+    const match = url.match(/product-details\/(\d+)/);
+    if (match) dropiSku = match[1];
+
+    return {
+      success: true,
+      title,
+      description: description.substring(0, 500), // Limit description length
+      images: Array.from(new Set(images)).slice(0, 5), // Max 5 unique images
+      dropiSku,
+      originalUrl: url
+    };
+  } catch (error) {
+    console.error("Scraper Error:", error);
+    throw new HttpsError('internal', 'Error al hacer scraping de la URL: ' + error.message);
+  }
+});
 
 /**
  * 1. Crear Preferencia de Pago (Mercado Pago)
