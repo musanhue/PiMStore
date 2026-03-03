@@ -16,7 +16,7 @@ import {
 import {
   getFirestore, collection, addDoc, getDocs, serverTimestamp,
   doc, deleteDoc, query, orderBy, updateDoc, increment,
-  where, limit, onSnapshot
+  where, limit, onSnapshot, setDoc, getDoc
 } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -301,13 +301,17 @@ export default function App() {
       {view === 'news' && (
         <PageWrapper title="Novedades" onBack={() => setView('home')}>
           <div className="grid gap-8">
-            {[1, 2].map(i => (
-              <div key={i} className="bg-white p-10 rounded-[40px] flex flex-col md:flex-row gap-8 items-center shadow-sm border border-gray-100">
-                <div className="h-64 w-full md:w-1/3 bg-[#f5f5f7] rounded-3xl animate-pulse"></div>
+            {products.length === 0 ? <p className="text-center text-gray-400 py-10">Cargando novedades...</p> : products.slice(0, 3).map((p, i) => (
+              <div key={p.id} className="bg-white p-10 rounded-[40px] flex flex-col md:flex-row gap-8 items-center shadow-sm border border-gray-100 group hover:shadow-xl transition-shadow cursor-pointer" onClick={() => setSelectedProduct(p)}>
+                <div className="h-64 w-full md:w-1/3 bg-[#f5f5f7] rounded-3xl overflow-hidden relative shrink-0">
+                  {i === 0 && <div className="absolute top-4 left-4 bg-indigo-600 text-white text-[10px] uppercase font-bold px-4 py-1.5 rounded-full z-10 tracking-widest shadow-lg">El Más Reciente</div>}
+                  <img src={p.image} alt={p.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
+                </div>
                 <div className="flex-1">
-                  <span className="text-indigo-600 font-bold text-xs uppercase tracking-widest">Lanzamiento</span>
-                  <h3 className="text-2xl font-bold mt-2 mb-4">Nueva Colección Smart Home</h3>
-                  <p className="text-gray-500">Estamos preparando una serie de productos que conectarán tu hogar como nunca antes. Espéralo muy pronto.</p>
+                  <span className="text-indigo-600 font-bold text-[11px] uppercase tracking-[0.2em]">{p.category}</span>
+                  <h3 className="text-3xl font-bold mt-3 mb-4 tracking-tight leading-tight">{p.title}</h3>
+                  <p className="text-gray-500 mb-8 max-w-lg leading-relaxed">{p.description}</p>
+                  <button className="text-black font-bold flex items-center gap-2 group-hover:gap-4 transition-all uppercase text-xs tracking-widest"><Zap size={14} className="text-indigo-600" /> Ver Detalles <ArrowRight size={14} /></button>
                 </div>
               </div>
             ))}
@@ -341,7 +345,7 @@ export default function App() {
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), where("orderNumber", "==", trackId), limit(1));
                 const s = await getDocs(q);
                 setTrackResult(s.empty ? 'not_found' : s.docs[0].data());
-              }} className="bg-black text-white px-8 rounded-2xl font-bold hover:bg-gray-800 transition-colors">Buscar</button>
+              }} className="bg-indigo-600 text-white px-8 rounded-2xl font-bold hover:bg-indigo-700 transition-colors">Buscar</button>
             </div>
             {trackResult === 'not_found' && <div className="mt-8 p-4 bg-red-50 text-red-600 rounded-xl font-bold">Orden no encontrada</div>}
             {typeof trackResult === 'object' && (
@@ -391,7 +395,7 @@ export default function App() {
           <div className="space-y-3">
             <p className="text-black font-bold uppercase tracking-widest text-[10px] mb-4">Empresa</p>
             <button onClick={() => setView('about')} className="block hover:text-black">Sobre Nosotros</button>
-            <button onClick={() => setIsAdminOpen(true)} className="block hover:text-black flex items-center gap-2"><Lock size={12} /> Staff Panel</button>
+            <button onClick={() => setIsAdminOpen(true)} className="block hover:text-black flex items-center gap-2">{user && !user.isAnonymous && user.email !== 'musanhue@gmail.com' ? <><User size={12} /> Mi Perfil</> : <><Lock size={12} /> {user && user.email === 'musanhue@gmail.com' ? 'Staff Panel' : 'Staff / Perfil'}</>}</button>
           </div>
         </div>
       </footer>
@@ -413,7 +417,7 @@ export default function App() {
               <h2 className="text-[36px] font-bold leading-tight mb-4">{selectedProduct.title}</h2>
               <p className="text-[28px] font-bold mb-8">${selectedProduct.price.toLocaleString('es-CL')}</p>
               <div className="space-y-6 flex-grow"><p className="text-[17px] text-gray-600 leading-relaxed">{selectedProduct.description}</p></div>
-              <button onClick={() => addToCart(selectedProduct)} className="w-full bg-black text-white py-5 rounded-full font-bold text-lg hover:bg-indigo-600 transition-all shadow-xl">Añadir a la bolsa</button>
+              <button onClick={() => addToCart(selectedProduct)} className="w-full bg-indigo-600 text-white py-5 rounded-full font-bold text-lg hover:bg-indigo-700 transition-all shadow-xl">Añadir a la bolsa</button>
             </div>
           </div>
         </div>
@@ -442,7 +446,7 @@ export default function App() {
             {cart.length > 0 && (
               <div className="pt-10 mt-6 border-t border-gray-100">
                 <div className="flex justify-between mb-8 items-end"><span className="text-gray-500">Subtotal</span><span className="font-bold text-[28px]">${cartTotal.toLocaleString('es-CL')}</span></div>
-                <button onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} className="w-full bg-black text-white py-5 rounded-[20px] font-bold hover:bg-indigo-600 transition-all shadow-xl">Comprar</button>
+                <button onClick={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} className="w-full bg-indigo-600 text-white py-5 rounded-[20px] font-bold hover:bg-indigo-700 transition-all shadow-xl">Comprar</button>
               </div>
             )}
           </div>
@@ -469,9 +473,19 @@ const AuthModal = ({ onClose, auth }) => {
   const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
+  const [consentimiento, setConsentimiento] = useState(false);
 
   const handleGoogle = async () => {
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); onClose(); } catch (e) { setError(e.message); }
+    try {
+      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      // Al registrarse con Google, también podemos guardarlos
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cred.user.uid), {
+        email: cred.user.email,
+        consentimiento: true, // Google login implies consent mostly, or ask later
+        lastLogin: serverTimestamp()
+      }, { merge: true });
+      onClose();
+    } catch (e) { setError(e.message); }
   };
 
   const handleEmail = async (e) => {
@@ -482,7 +496,14 @@ const AuthModal = ({ onClose, auth }) => {
         await signInWithEmailAndPassword(auth, email, pass);
       } else {
         if (!validateEmail(email)) throw new Error("Email inválido");
+        if (!consentimiento) throw new Error("Debes aceptar los términos para registrarte.");
         const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        // Guardar usuario en Firestore
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', cred.user.uid), {
+          email: cred.user.email,
+          consentimiento: true,
+          createdAt: serverTimestamp()
+        });
         await sendEmailVerification(cred.user);
         alert("Cuenta creada. Revisa tu correo para verificar.");
       }
@@ -500,8 +521,14 @@ const AuthModal = ({ onClose, auth }) => {
         <form onSubmit={handleEmail} className="space-y-4">
           <input className="w-full bg-[#f5f5f7] p-4 rounded-xl outline-none" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
           <input className="w-full bg-[#f5f5f7] p-4 rounded-xl outline-none" type="password" placeholder="Contraseña" value={pass} onChange={e => setPass(e.target.value)} />
+          {!isLogin && (
+            <label className="flex items-start gap-3 mt-4 text-xs text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={consentimiento} onChange={e => setConsentimiento(e.target.checked)} className="mt-1 w-4 h-4 text-indigo-600 rounded" />
+              <span>Concedo explícitamente el consentimiento legal a PiMStore para almacenar mis datos de contacto y dirección para facturación, envíos y recibir futuras promociones, de acuerdo con las normativas locales.</span>
+            </label>
+          )}
           {error && <p className="text-red-500 text-xs text-center">{error}</p>}
-          <button className="w-full bg-black text-white py-4 rounded-xl font-bold">{isLogin ? 'Entrar' : 'Registrarse'}</button>
+          <button className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-colors">{isLogin ? 'Entrar' : 'Registrarse'}</button>
         </form>
         <p className="text-center mt-6 text-sm text-gray-500 cursor-pointer hover:text-black" onClick={() => setIsLogin(!isLogin)}>{isLogin ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Inicia Sesión'}</p>
       </div>
@@ -517,35 +544,39 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
       <div className="fixed inset-0 z-[200] bg-[#f5f5f7] flex items-center justify-center p-6">
         <div className="bg-white p-12 rounded-[40px] shadow-sm max-w-md w-full text-center">
           <Lock size={48} className="mx-auto mb-6 text-gray-300" />
-          <h3 className="text-2xl font-bold mb-4">Acceso Staff</h3>
-          <p className="text-gray-500 mb-8">Área restringida para administradores.</p>
-          <button onClick={handleLogin} className="w-full bg-black text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2"><Globe size={18} /> Acceso con Google</button>
+          <h3 className="text-2xl font-bold mb-4">Acceso a tu Cuenta</h3>
+          <p className="text-gray-500 mb-8">Inicia sesión para ver tus pedidos o administrar.</p>
+          <button onClick={handleLogin} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors"><Globe size={18} /> Acceso con Google</button>
           <button onClick={onClose} className="mt-4 text-gray-400 text-sm hover:text-black">Volver a la tienda</button>
         </div>
       </div>
     );
   }
 
+  const isAdmin = user.email === 'musanhue@gmail.com';
+  const activeTab = !isAdmin && tab !== 'orders' ? 'orders' : tab;
+  const userOrders = isAdmin ? orders : orders.filter(o => o.userId === user.uid);
+
   return (
     <div className="fixed inset-0 z-[200] bg-[#f5f5f7] flex flex-col animate-in slide-in-from-bottom duration-500">
       <div className="bg-white px-8 h-16 flex justify-between items-center border-b border-gray-200 sticky top-0">
         <div className="flex items-center gap-8">
-          <div className="font-bold flex items-center gap-2"><Lock size={18} /> Staff Central</div>
+          <div className="font-bold flex items-center gap-2">{isAdmin ? <><Lock size={18} /> Staff Central</> : <><User size={18} /> Mi Perfil</>}</div>
           <div className="hidden md:flex gap-6 text-[11px] font-bold uppercase tracking-widest text-gray-400">
-            <button onClick={() => setTab('dashboard')} className={tab === 'dashboard' ? 'text-black' : ''}>Resumen</button>
-            <button onClick={() => setTab('inventory')} className={tab === 'inventory' ? 'text-black' : ''}>Inventario</button>
-            <button onClick={() => setTab('orders')} className={tab === 'orders' ? 'text-black' : ''}>Pedidos</button>
+            {isAdmin && <button onClick={() => setTab('dashboard')} className={activeTab === 'dashboard' ? 'text-black' : ''}>Resumen</button>}
+            {isAdmin && <button onClick={() => setTab('inventory')} className={activeTab === 'inventory' ? 'text-black' : ''}>Inventario</button>}
+            <button onClick={() => setTab('orders')} className={activeTab === 'orders' ? 'text-black' : ''}>{isAdmin ? 'Pedidos' : 'Mis Compras'}</button>
           </div>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
       </div>
       <div className="flex-1 overflow-y-auto p-10 max-w-7xl mx-auto w-full">
         <div className="flex justify-between items-center mb-10">
-          <div className="flex gap-4 items-center"><div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center font-bold text-indigo-600">{user.email[0].toUpperCase()}</div><div><p className="text-xs font-bold text-gray-400 uppercase">Sesión activa</p><p className="font-bold">{user.email}</p></div></div>
-          <button onClick={() => signOut(auth)} className="text-red-500 font-bold bg-red-50 px-6 py-2 rounded-xl text-sm">Cerrar Sesión</button>
+          <div className="flex gap-4 items-center"><div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center font-bold text-indigo-600">{user.email[0].toUpperCase()}</div><div><p className="text-xs font-bold text-gray-400 uppercase">{isAdmin ? 'Admin' : 'Cliente'}</p><p className="font-bold">{user.email}</p></div></div>
+          <button onClick={() => { signOut(auth); onClose(); }} className="text-red-500 font-bold bg-red-50 px-6 py-2 rounded-xl text-sm hover:bg-red-100 transition-colors">Cerrar Sesión</button>
         </div>
 
-        {tab === 'dashboard' && (
+        {activeTab === 'dashboard' && isAdmin && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="bg-white p-8 rounded-[32px] border border-gray-100"><Package className="text-indigo-600 mb-2" /><h4 className="text-4xl font-bold">{products.length}</h4><p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Productos</p></div>
             <div className="bg-white p-8 rounded-[32px] border border-gray-100"><Clock className="text-indigo-600 mb-2" /><h4 className="text-4xl font-bold">{orders.length}</h4><p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Pedidos</p></div>
@@ -553,7 +584,7 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
           </div>
         )}
 
-        {tab === 'inventory' && (
+        {activeTab === 'inventory' && isAdmin && (
           <div className="space-y-10">
             <div className="bg-white p-10 rounded-[32px] border border-gray-100">
               <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><PlusCircle size={20} /> Nuevo Item</h3>
@@ -565,7 +596,7 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
                 <input placeholder="Stock" type="number" value={newProd.stock} onChange={e => setNewProd({ ...newProd, stock: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="SKU Dropi" value={newProd.dropiSku} onChange={e => setNewProd({ ...newProd, dropiSku: e.target.value })} className="bg-indigo-50/50 p-4 rounded-xl outline-none border border-indigo-100" />
                 <textarea placeholder="Descripción" value={newProd.description} onChange={e => setNewProd({ ...newProd, description: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none md:col-span-3 h-24" required />
-                <button className="md:col-span-3 bg-black text-white py-4 rounded-xl font-bold">Publicar</button>
+                <button className="md:col-span-3 bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-colors">Publicar</button>
               </form>
             </div>
             <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden">
@@ -575,9 +606,10 @@ const AdminPanel = ({ onClose, user, auth, products, orders, newProd, setNewProd
           </div>
         )}
 
-        {tab === 'orders' && (
+        {activeTab === 'orders' && (
           <div className="space-y-6">
-            {orders.length === 0 ? <p className="text-center text-gray-400 py-20">Sin pedidos.</p> : orders.map(o => (
+            {!isAdmin && <h3 className="text-2xl font-bold mb-6">Historial de Compras</h3>}
+            {userOrders.length === 0 ? <p className="text-center text-gray-400 py-20">{isAdmin ? 'Sin pedidos.' : 'Aún no tienes compras registradas.'}</p> : userOrders.map(o => (
               <div key={o.id} className="bg-white p-8 rounded-[32px] border border-gray-100 flex justify-between items-center shadow-sm">
                 <div>
                   <div className="flex items-center gap-3"><span className="bg-green-50 text-green-600 text-[9px] font-bold px-2 py-1 rounded-md uppercase">Pagado</span><span className="font-mono text-lg font-bold">#{o.orderNumber}</span></div>
@@ -599,6 +631,36 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
   const [preferenceId, setPreferenceId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [savingAddress, setSavingAddress] = useState(false);
+
+  // Intentar cargar la dirección guardada si el usuario está autenticado
+  useEffect(() => {
+    if (user && !user.isAnonymous) {
+      const loadProfile = async () => {
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+          const snap = await getDoc(docRef);
+          if (snap.exists() && snap.data().savedAddress) {
+            const addr = snap.data().savedAddress;
+            setFormData(prev => ({
+              ...prev,
+              nombre: addr.nombre || prev.nombre,
+              rut: addr.rut || prev.rut,
+              telefono: addr.telefono || prev.telefono,
+              calle: addr.calle || prev.calle,
+              numero: addr.numero || prev.numero,
+              depto: addr.depto || prev.depto,
+              comuna: addr.comuna || prev.comuna,
+              region: addr.region || prev.region
+            }));
+          }
+        } catch (e) {
+          console.error("No se pudo cargar la dirección del usuario", e);
+        }
+      };
+      loadProfile();
+    }
+  }, [user]);
 
   const comunasDisponibles = regionesYComunas.find(r => r.region === formData.region)?.comunas || [];
 
@@ -653,9 +715,26 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
   }, []);
 
   const simulateSuccess = async () => {
+    if (user && !user.isAnonymous) {
+      try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid), {
+          savedAddress: {
+            nombre: formData.nombre,
+            rut: formData.rut,
+            telefono: formData.telefono,
+            calle: formData.calle,
+            numero: formData.numero,
+            depto: formData.depto,
+            region: formData.region,
+            comuna: formData.comuna
+          }
+        }, { merge: true });
+      } catch (e) { console.error("Error guardando preferencias", e); }
+    }
+
     const num = generateNumericOrder();
     const direccionCompleta = `${formData.calle} ${formData.numero} ${formData.depto ? 'Depto ' + formData.depto : ''}`.trim();
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), { orderNumber: num, customer: { ...formData, direccion: direccionCompleta }, items: cart, total, status: 'pagado', createdAt: serverTimestamp() });
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), { orderNumber: num, customer: { ...formData, direccion: direccionCompleta }, items: cart, total, status: 'pagado', createdAt: serverTimestamp(), userId: user && !user.isAnonymous ? user.uid : 'anonymous' });
     onComplete(num);
   };
 
@@ -722,7 +801,7 @@ const CheckoutModal = ({ onClose, cart, total, onComplete, user }) => {
                 <button
                   onClick={handleNext}
                   disabled={loading || !isFormValid}
-                  className={`w-full bg-black text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl flex items-center justify-center gap-2 ${loading || !isFormValid ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-600'}`}
+                  className={`w-full bg-indigo-600 text-white px-10 py-4 rounded-2xl font-bold transition-all shadow-xl flex items-center justify-center gap-2 ${loading || !isFormValid ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'}`}
                 >
                   {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>}
                   {loading ? 'Procesando...' : 'Finalizar Compra'}
@@ -763,7 +842,7 @@ const SuccessModal = ({ orderNum, onClose }) => (
       <h2 className="text-[32px] font-bold text-black mb-3">¡Pedido Exitoso!</h2>
       <p className="text-gray-500 font-medium mb-8">Tu orden está siendo procesada.</p>
       <div className="bg-[#f5f5f7] rounded-3xl p-6 mb-10 border border-gray-100"><span className="text-[11px] font-bold text-gray-400 uppercase block mb-2 tracking-widest">Seguimiento</span><span className="text-2xl font-mono font-bold">#{orderNum}</span></div>
-      <button onClick={onClose} className="w-full bg-black text-white py-5 rounded-2xl font-bold hover:bg-gray-800 transition-all shadow-xl">Continuar</button>
+      <button onClick={onClose} className="w-full bg-indigo-600 text-white py-5 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl">Continuar</button>
     </div>
   </div>
 );
