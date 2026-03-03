@@ -22,12 +22,12 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // --- CONFIGURACIÓN FIREBASE ---
 const firebaseConfig = {
-  apiKey: "AIzaSyA2mD9a4aWBnBa3we7Cx7jWJpB6jzrUcII",
-  authDomain: "pimstore.firebaseapp.com",
-  projectId: "pimstore",
-  storageBucket: "pimstore.firebasestorage.app",
-  messagingSenderId: "155266458339",
-  appId: "1:155266458339:web:4734100dbcbe852cbb1bd6"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
