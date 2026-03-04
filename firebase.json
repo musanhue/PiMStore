@@ -8,6 +8,10 @@
     ],
     "rewrites": [
       {
+        "source": "/wc-auth/v1/authorize",
+        "function": "wcAuth"
+      },
+      {
         "source": "/wp-json/**",
         "function": "wcWebhook"
       },

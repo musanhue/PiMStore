@@ -199,6 +199,7 @@ exports.enviarOrdenADropi = onDocumentCreated({
       console.error(e);
       return snap.ref.update({ dropiSync: 'error', dropiError: e.message });
   }
+  */
   return null;
 });
 
@@ -206,140 +207,183 @@ exports.enviarOrdenADropi = onDocumentCreated({
  * 3. Webhook emulando WooCommerce API (/wp-json/wc/v3/orders)
  * Recibe actualizaciones de estado desde Dropi y actualiza la base de datos de PiMStore.
  */
-  exports.wcWebhook = onRequest(async (req, res) => {
-    // 1. Dropi hace un GET inicial para verificar que la tienda es un WooCommerce válido
-    if (req.method === 'GET') {
-      return res.status(200).json({
-        name: "PiMStore",
-        description: "Tienda PiMStore",
-        url: "https://pimstore.web.app",
-        home: "https://pimstore.web.app",
-        routes: {
-          "/wc/v3": { endpoints: [{ methods: ["GET", "POST"] }] },
-          "/wc/v3/orders": { endpoints: [{ methods: ["GET", "POST"] }] }
-        }
+exports.wcWebhook = onRequest(async (req, res) => {
+  // 1. Dropi hace un GET inicial para verificar que la tienda es un WooCommerce válido
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      name: "PiMStore",
+      description: "Tienda PiMStore",
+      url: "https://pimstore.web.app",
+      home: "https://pimstore.web.app",
+      routes: {
+        "/wc/v3": { endpoints: [{ methods: ["GET", "POST"] }] },
+        "/wc/v3/orders": { endpoints: [{ methods: ["GET", "POST"] }] }
+      }
+    });
+  }
+
+  // 2. Para POST/PUT, procesamos la actualización de la orden
+  if (req.method !== 'POST' && req.method !== 'PUT') {
+    return res.status(405).send('Method Not Allowed');
+  }
+
+  try {
+    const authHeader = req.headers.authorization || '';
+    const tokenParts = authHeader.split(' ');
+    let token = '';
+
+    if (tokenParts.length === 2 && tokenParts[0] === 'Bearer') {
+      token = tokenParts[1];
+    } else if (req.query.token) {
+      token = req.query.token;
+    } else {
+      // Algunas veces en WooCommerce se envía vía query o basic auth. Por ahora asumimos Bearer o Header custom.
+      token = req.headers['x-dropi-token'] || req.headers['x-wc-webhook-signature'] || '';
+    }
+
+    // Autenticación por Consumer Key de WooCommerce (Dropi)
+    const consumerKey = req.query.consumer_key || '';
+    const consumerSecret = req.query.consumer_secret || '';
+
+    let isAuthenticated = false;
+
+    // a) Verificamos si pasaron las credenciales exactas (por Query param)
+    if (consumerKey === 'ck_pimstore_dropi' && consumerSecret === 'cs_pimstore_dropi') {
+      isAuthenticated = true;
+    }
+    // b) Verificamos Basic Auth (común en WooCommerce)
+    else if (authHeader.startsWith('Basic ')) {
+      const b64auth = authHeader.split(' ')[1] || '';
+      const [user, pwd] = Buffer.from(b64auth, 'base64').toString().split(':');
+      if (user === 'ck_pimstore_dropi' && pwd === 'cs_pimstore_dropi') {
+        isAuthenticated = true;
+      }
+    }
+    // c) Dropi Token o variables fallback
+    else if (token === DROPI_WOOCOMMERCE_TOKEN || token.includes('tEwJ5B1c')) {
+      isAuthenticated = true;
+    }
+    // d) Permiso excepcional si en el body viene desde Dropi (algunas veces no mandan token visible pero sí payload de Dropi)
+    else if (req.body && req.body.status && req.headers['user-agent']?.includes('Dropi')) {
+      isAuthenticated = true;
+    }
+
+    if (!isAuthenticated) {
+      console.warn("Intento de acceso webhook sin token válido");
+      return res.status(401).send('Unauthorized');
+    }
+
+    const payload = req.body;
+    console.log("Recibido Webhook WooCommerce (Dropi):", JSON.stringify(payload));
+
+    const orderIdOrNumber = payload.id || payload.number || payload.order_id;
+    const newStatus = payload.status; // ej. 'processing', 'completed', 'cancelled'
+
+    if (!orderIdOrNumber || !newStatus) {
+      return res.status(400).send('Bad Request: Missing order id or status');
+    }
+
+    // Mapeo básico de estados comunes de WooCommerce a PiMStore
+    let pimstoreStatus = newStatus;
+    switch (newStatus.toLowerCase()) {
+      case 'processing': pimstoreStatus = 'Preparando'; break;
+      case 'completed': pimstoreStatus = 'Entregado'; break;
+      case 'cancelled': pimstoreStatus = 'Cancelado'; break;
+      case 'refunded': pimstoreStatus = 'Pendiente de Reembolso'; break;
+      case 'shipped': pimstoreStatus = 'Enviado'; break;
+      case 'returned': pimstoreStatus = 'Producto Devuelto'; break;
+      // Dropi might send specific Spanish statuses. Just pass them if unmatched.
+      default:
+        if (newStatus.toLowerCase().includes('enviad')) pimstoreStatus = 'Enviado';
+        else if (newStatus.toLowerCase().includes('entregad')) pimstoreStatus = 'Entregado';
+        break;
+    }
+
+    // Necesitamos encontrar la orden en Firestore usando el orderNumber.
+    // Como functions index.js no usa un appId fijo (o lo usa si lo defines), 
+    // asumimos que puedes tener múltiples apps o buscar globalmente.
+    // Por diseño actual de tu BD: artifacts/{appId}/public/data/orders/{orderId}
+    // Como es Firebase Functions, usaremos un CollectionGroup (requiere índice en Firestore) 
+    // o consultaremos de forma estricta si conocemos el AppId.
+    // Usaremos un collectionGroup ya que "orderNumber" debe ser único.
+
+    const ordersSnapshot = await db.collectionGroup('orders')
+      .where('orderNumber', '==', String(orderIdOrNumber))
+      .limit(1)
+      .get();
+
+    if (ordersSnapshot.empty) {
+      console.warn(`Webhook: No se encontró orden con orderNumber ${orderIdOrNumber}`);
+      return res.status(404).send('Order not found');
+    }
+
+    const orderDoc = ordersSnapshot.docs[0];
+    const orderData = orderDoc.data();
+
+    const currentStatus = orderData.orderStatus || orderData.status || 'Pendiente';
+
+    // Si el estado es distinto, lo actualizamos y añadimos al historial
+    if (currentStatus !== pimstoreStatus) {
+      const newHistory = [
+        ...(orderData.statusHistory || [{ status: currentStatus, date: orderData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString() }]),
+        { status: pimstoreStatus, date: new Date().toISOString(), source: 'dropi_webhook' }
+      ];
+
+      await orderDoc.ref.update({
+        orderStatus: pimstoreStatus,
+        statusHistory: newHistory,
+        dropiUpdated: new Date().toISOString()
       });
+      console.log(`Orden ${orderIdOrNumber} actualizada al estado ${pimstoreStatus}`);
+    } else {
+      console.log(`Orden ${orderIdOrNumber} ya tenía el estado ${pimstoreStatus}. Ignorando.`);
     }
 
-    // 2. Para POST/PUT, procesamos la actualización de la orden
-    if (req.method !== 'POST' && req.method !== 'PUT') {
-      return res.status(405).send('Method Not Allowed');
+  } catch (error) {
+    console.error("Error en Webhook WooCommerce:", error);
+    return res.status(500).send('Internal Server Error');
+  }
+});
+
+/**
+ * 4. Auth Webhook emulando la página de autorización de WooCommerce
+ * Cuando el usuario pulsa "Autenticar Tienda" en Dropi, los redirige a /wc-auth/v1/authorize
+ */
+exports.wcAuth = onRequest(async (req, res) => {
+  const { app_name, scope, user_id, return_url, callback_url } = req.query;
+
+  try {
+    console.log("Recibida petición de autenticación de Dropi:", req.query);
+    // 1. Enviar las claves al callback_url provisto por Dropi
+    if (callback_url) {
+      const axios = require('axios');
+      await axios.post(callback_url, {
+        key_id: 1,
+        user_id: user_id || 1,
+        consumer_key: 'ck_pimstore_dropi',
+        consumer_secret: 'cs_pimstore_dropi',
+        key_permissions: scope || 'read_write'
+      });
+      console.log("Claves POSTeadas a Dropi en", callback_url);
+    } else {
+      console.warn("No se recibió callback_url de Dropi");
     }
 
-    try {
-      const authHeader = req.headers.authorization || '';
-      const tokenParts = authHeader.split(' ');
-      let token = '';
-
-      if (tokenParts.length === 2 && tokenParts[0] === 'Bearer') {
-        token = tokenParts[1];
-      } else if (req.query.token) {
-        token = req.query.token;
-      } else {
-        // Algunas veces en WooCommerce se envía vía query o basic auth. Por ahora asumimos Bearer o Header custom.
-        token = req.headers['x-dropi-token'] || req.headers['x-wc-webhook-signature'] || '';
-      }
-
-      // Autenticación por Consumer Key de WooCommerce (Dropi)
-      const consumerKey = req.query.consumer_key || '';
-      const consumerSecret = req.query.consumer_secret || '';
-
-      let isAuthenticated = false;
-
-      // a) Verificamos si pasaron las credenciales exactas (por Query param)
-      if (consumerKey === 'ck_pimstore_dropi' && consumerSecret === 'cs_pimstore_dropi') {
-        isAuthenticated = true;
-      }
-      // b) Verificamos Basic Auth (común en WooCommerce)
-      else if (authHeader.startsWith('Basic ')) {
-        const b64auth = authHeader.split(' ')[1] || '';
-        const [user, pwd] = Buffer.from(b64auth, 'base64').toString().split(':');
-        if (user === 'ck_pimstore_dropi' && pwd === 'cs_pimstore_dropi') {
-          isAuthenticated = true;
-        }
-      }
-      // c) Dropi Token o variables fallback
-      else if (token === DROPI_WOOCOMMERCE_TOKEN || token.includes('tEwJ5B1c')) {
-        isAuthenticated = true;
-      }
-      // d) Permiso excepcional si en el body viene desde Dropi (algunas veces no mandan token visible pero sí payload de Dropi)
-      else if (req.body && req.body.status && req.headers['user-agent']?.includes('Dropi')) {
-        isAuthenticated = true;
-      }
-
-      if (!isAuthenticated) {
-        console.warn("Intento de acceso webhook sin token válido");
-        return res.status(401).send('Unauthorized');
-      }
-
-      const payload = req.body;
-      console.log("Recibido Webhook WooCommerce (Dropi):", JSON.stringify(payload));
-
-      const orderIdOrNumber = payload.id || payload.number || payload.order_id;
-      const newStatus = payload.status; // ej. 'processing', 'completed', 'cancelled'
-
-      if (!orderIdOrNumber || !newStatus) {
-        return res.status(400).send('Bad Request: Missing order id or status');
-      }
-
-      // Mapeo básico de estados comunes de WooCommerce a PiMStore
-      let pimstoreStatus = newStatus;
-      switch (newStatus.toLowerCase()) {
-        case 'processing': pimstoreStatus = 'Preparando'; break;
-        case 'completed': pimstoreStatus = 'Entregado'; break;
-        case 'cancelled': pimstoreStatus = 'Cancelado'; break;
-        case 'refunded': pimstoreStatus = 'Pendiente de Reembolso'; break;
-        case 'shipped': pimstoreStatus = 'Enviado'; break;
-        case 'returned': pimstoreStatus = 'Producto Devuelto'; break;
-        // Dropi might send specific Spanish statuses. Just pass them if unmatched.
-        default:
-          if (newStatus.toLowerCase().includes('enviad')) pimstoreStatus = 'Enviado';
-          else if (newStatus.toLowerCase().includes('entregad')) pimstoreStatus = 'Entregado';
-          break;
-      }
-
-      // Necesitamos encontrar la orden en Firestore usando el orderNumber.
-      // Como functions index.js no usa un appId fijo (o lo usa si lo defines), 
-      // asumimos que puedes tener múltiples apps o buscar globalmente.
-      // Por diseño actual de tu BD: artifacts/{appId}/public/data/orders/{orderId}
-      // Como es Firebase Functions, usaremos un CollectionGroup (requiere índice en Firestore) 
-      // o consultaremos de forma estricta si conocemos el AppId.
-      // Usaremos un collectionGroup ya que "orderNumber" debe ser único.
-
-      const ordersSnapshot = await db.collectionGroup('orders')
-        .where('orderNumber', '==', String(orderIdOrNumber))
-        .limit(1)
-        .get();
-
-      if (ordersSnapshot.empty) {
-        console.warn(`Webhook: No se encontró orden con orderNumber ${orderIdOrNumber}`);
-        return res.status(404).send('Order not found');
-      }
-
-      const orderDoc = ordersSnapshot.docs[0];
-      const orderData = orderDoc.data();
-
-      const currentStatus = orderData.orderStatus || orderData.status || 'Pendiente';
-
-      // Si el estado es distinto, lo actualizamos y añadimos al historial
-      if (currentStatus !== pimstoreStatus) {
-        const newHistory = [
-          ...(orderData.statusHistory || [{ status: currentStatus, date: orderData.createdAt?.toDate?.()?.toISOString() || new Date().toISOString() }]),
-          { status: pimstoreStatus, date: new Date().toISOString(), source: 'dropi_webhook' }
-        ];
-
-        await orderDoc.ref.update({
-          orderStatus: pimstoreStatus,
-          statusHistory: newHistory,
-          dropiUpdated: new Date().toISOString()
-        });
-        console.log(`Orden ${orderIdOrNumber} actualizada al estado ${pimstoreStatus}`);
-      } else {
-        console.log(`Orden ${orderIdOrNumber} ya tenía el estado ${pimstoreStatus}. Ignorando.`);
-      }
-
-    } catch (error) {
-      console.error("Error en Webhook WooCommerce:", error);
-      return res.status(500).send('Internal Server Error');
+    // 2. Redirigir al usuario de vuelta a Dropi (return_url)
+    if (return_url) {
+      const separator = return_url.includes('?') ? '&' : '?';
+      console.log(`Redirigiendo a Dropi: ${return_url}${separator}success=1`);
+      return res.redirect(`${return_url}${separator}success=1`);
     }
-  });
+
+    // Fallback si no hay return_url
+    return res.status(200).send("Autenticación simulada con éxito. Puedes cerrar esta ventana.");
+  } catch (error) {
+    console.error("Error en wcAuth callback:", error);
+    if (return_url) {
+      const separator = return_url.includes('?') ? '&' : '?';
+      return res.redirect(`${return_url}${separator}success=0`);
+    }
+    return res.status(500).send("Error autenticando: " + error.message);
+  }
+});
