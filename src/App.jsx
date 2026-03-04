@@ -16,7 +16,7 @@ import {
   CheckCircle2, AlertCircle, ChevronRight, Search, Mail, Phone,
   MapPin, Globe, ArrowLeft, LogIn, LogOut, LayoutGrid, Clock,
   PlusCircle, ListFilter, BarChart3, Settings, Trash, User, UserPlus,
-  ChevronDown
+  ChevronDown, Edit2
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import {
@@ -163,7 +163,8 @@ export default function App() {
 
   // Estados Admin
   const [adminTab, setAdminTab] = useState('dashboard');
-  const [newProd, setNewProd] = useState({ title: '', price: '', category: '', image: '', description: '', stock: 0, dropiSku: '' });
+  const [newProd, setNewProd] = useState({ title: '', price: '', precioNormal: '', category: '', image: '', description: '', stock: 0, dropiSku: '', isFeatured: false });
+  const [editingProductId, setEditingProductId] = useState(null);
 
   // Estados Tracking
   const [trackId, setTrackId] = useState('');
@@ -274,15 +275,39 @@ export default function App() {
   const handleAddProduct = async (e) => {
     e.preventDefault();
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
-        ...newProd,
-        price: Number(newProd.price),
-        stock: Number(newProd.stock),
-        createdAt: serverTimestamp()
-      });
-      setNewProd({ title: '', price: '', category: '', image: '', description: '', stock: 0, dropiSku: '' });
-      alert("Producto agregado correctamente");
-    } catch (err) { alert("Error al guardar producto"); }
+      if (newProd.isFeatured) {
+        const featuredCount = products.filter(p => p.isFeatured && p.id !== editingProductId).length;
+        if (featuredCount >= 3) {
+          alert('Máximo 3 productos destacados permitidos.');
+          return;
+        }
+      }
+
+      if (editingProductId) {
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), {
+          ...newProd,
+          price: Number(newProd.price),
+          precioNormal: newProd.precioNormal ? Number(newProd.precioNormal) : '',
+          stock: Number(newProd.stock || 0),
+          updatedAt: serverTimestamp()
+        });
+        alert('Producto actualizado correctamente');
+      } else {
+        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
+          ...newProd,
+          price: Number(newProd.price),
+          precioNormal: newProd.precioNormal ? Number(newProd.precioNormal) : '',
+          stock: Number(newProd.stock || 0),
+          createdAt: serverTimestamp()
+        });
+        alert("Producto agregado correctamente");
+      }
+      setNewProd({ title: '', price: '', precioNormal: '', category: '', image: '', description: '', stock: 0, dropiSku: '', isFeatured: false });
+      setEditingProductId(null);
+      setAdminTab('inventory');
+    } catch (e) {
+      alert("Error al guardar: " + e.message);
+    }
   };
 
   const deleteProduct = async (id) => {
@@ -437,7 +462,12 @@ export default function App() {
                     <div className="flex justify-between font-bold"><h4>{item.title}</h4><button onClick={() => removeFromCart(item.id)}><Trash size={16} className="text-gray-300 hover:text-red-500" /></button></div>
                     <div className="flex items-center gap-4 mt-4">
                       <div className="flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1 text-sm"><button onClick={() => updateQuantity(item.id, -1)}><Minus size={14} /></button><span className="w-4 text-center">{item.quantity}</span><button onClick={() => updateQuantity(item.id, 1)}><Plus size={14} /></button></div>
-                      <p className="font-bold text-indigo-600 ml-auto">${(item.price * item.quantity).toLocaleString('es-CL')}</p>
+                      <div className="ml-auto text-right flex flex-col items-end">
+                        <p className="font-bold text-indigo-600">${(item.price * item.quantity).toLocaleString('es-CL')}</p>
+                        {item.precioNormal && Number(item.precioNormal) > Number(item.price) && (
+                          <p className="text-[10px] text-gray-400 line-through font-bold mt-0.5">${(Number(item.precioNormal) * item.quantity).toLocaleString('es-CL')}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -460,7 +490,7 @@ export default function App() {
       {completedOrder && <SuccessModal orderNum={completedOrder} onClose={() => setCompletedOrder(null)} />}
 
       {/* PANEL ADMIN STAFF */}
-      {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} user={user} userProfile={userProfile} auth={auth} products={products} orders={orders} customers={customers} newProd={newProd} setNewProd={setNewProd} handleAddProduct={handleAddProduct} deleteProduct={deleteProduct} tab={adminTab} setTab={setAdminTab} />}
+      {isAdminOpen && <AdminPanel onClose={() => setIsAdminOpen(false)} user={user} userProfile={userProfile} auth={auth} products={products} orders={orders} customers={customers} newProd={newProd} setNewProd={setNewProd} handleAddProduct={handleAddProduct} deleteProduct={deleteProduct} tab={adminTab} setTab={setAdminTab} functions={functions} editingProductId={editingProductId} setEditingProductId={setEditingProductId} />}
 
     </div>
   );
@@ -536,7 +566,7 @@ const AuthModal = ({ onClose, auth }) => {
   );
 };
 
-const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, orders, customers, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab }) => {
+const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, orders, customers, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab, editingProductId, setEditingProductId }) => {
   const [isScraping, setIsScraping] = useState(false);
   const [dropiUrlInput, setDropiUrlInput] = useState('');
 
@@ -618,7 +648,16 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
         {activeTab === 'inventory' && isAdmin && (
           <div className="space-y-10">
             <div className="bg-white p-10 rounded-[32px] border border-gray-100">
-              <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><PlusCircle size={20} /> Nuevo Item</h3>
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  {editingProductId ? <><Star size={20} className="text-yellow-500" /> Editar Item</> : <><PlusCircle size={20} /> Nuevo Item</>}
+                </h3>
+                {editingProductId && (
+                  <button type="button" onClick={() => { setEditingProductId(null); setNewProd({ title: '', price: '', precioNormal: '', category: '', image: '', description: '', stock: 0, dropiSku: '', isFeatured: false }); }} className="text-sm font-bold text-gray-400 hover:text-black">
+                    Cancelar Edición
+                  </button>
+                )}
+              </div>
 
               {/* Scraper Section */}
               <div className="mb-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100">
@@ -650,18 +689,25 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
                 setDropiUrlInput('');
               }} className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <input placeholder="Título" value={newProd.title} onChange={e => setNewProd({ ...newProd, title: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
-                <input placeholder="Precio" type="number" value={newProd.price} onChange={e => setNewProd({ ...newProd, price: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
+                <input placeholder="Precio Venta" type="number" value={newProd.price} onChange={e => setNewProd({ ...newProd, price: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
+                <input placeholder="Precio Normal (Opcional)" type="number" value={newProd.precioNormal} onChange={e => setNewProd({ ...newProd, precioNormal: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" />
                 <input placeholder="Categoría" value={newProd.category} onChange={e => setNewProd({ ...newProd, category: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="URL Imagen" value={newProd.image} onChange={e => setNewProd({ ...newProd, image: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="Stock" type="number" value={newProd.stock} onChange={e => setNewProd({ ...newProd, stock: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="SKU Dropi" value={newProd.dropiSku} onChange={e => setNewProd({ ...newProd, dropiSku: e.target.value })} className="bg-indigo-50/50 p-4 rounded-xl outline-none border border-indigo-100" />
+
+                <label className="flex items-center gap-3 cursor-pointer bg-[#f5f5f7] p-4 rounded-xl md:col-span-2">
+                  <input type="checkbox" checked={newProd.isFeatured} onChange={e => setNewProd({ ...newProd, isFeatured: e.target.checked })} className="w-5 h-5 accent-indigo-600 rounded" />
+                  <span className="font-bold flex items-center gap-2"><Star size={16} className={newProd.isFeatured ? "text-yellow-500 fill-yellow-500" : "text-gray-400"} /> Producto Destacado (Carrusel)</span>
+                </label>
+
                 <textarea placeholder="Descripción" value={newProd.description} onChange={e => setNewProd({ ...newProd, description: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none md:col-span-3 h-24" required />
-                <button className="md:col-span-3 bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-colors">Publicar</button>
+                <button className="md:col-span-3 bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-700 transition-colors">{editingProductId ? 'Guardar Cambios' : 'Publicar'}</button>
               </form>
             </div>
             <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden">
               <table className="w-full text-left"><thead className="bg-[#f5f5f7] text-[10px] font-bold text-gray-400 uppercase"><tr><th className="p-6">Producto</th><th className="p-6">Stock</th><th className="p-6">Precio</th><th className="p-6 text-center">Acción</th></tr></thead>
-                <tbody className="divide-y divide-gray-50">{products.map(p => (<tr key={p.id}><td className="p-6 flex items-center gap-4"><img src={p.image} className="w-10 h-10 rounded-lg object-cover" />{p.title}</td><td className="p-6">{p.stock}</td><td className="p-6">${p.price.toLocaleString('es-CL')}</td><td className="p-6 text-center"><button onClick={() => deleteProduct(p.id)} className="text-gray-300 hover:text-red-500"><Trash size={16} /></button></td></tr>))}</tbody></table>
+                <tbody className="divide-y divide-gray-50">{products.map(p => (<tr key={p.id}><td className="p-6 flex items-center gap-4"><img src={p.image} className="w-10 h-10 rounded-lg object-cover" /> <div>{p.isFeatured && <Star size={12} className="inline text-yellow-500 fill-yellow-500 mr-1 mb-0.5" />}<span className="font-medium">{p.title}</span></div></td><td className="p-6">{p.stock}</td><td className="p-6">${Number(p.price).toLocaleString('es-CL')}</td><td className="p-6 text-center whitespace-nowrap"><button onClick={() => { setEditingProductId(p.id); setNewProd({ title: p.title, price: p.price, precioNormal: p.precioNormal || '', category: p.category, image: p.image, description: p.description, stock: p.stock, dropiSku: p.dropiSku || '', isFeatured: p.isFeatured || false }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-400 hover:text-indigo-600 mr-4" title="Editar"><Edit2 size={16} /></button><button onClick={() => deleteProduct(p.id)} className="text-gray-300 hover:text-red-500" title="Eliminar"><Trash size={16} /></button></td></tr>))}</tbody></table>
             </div>
           </div>
         )}
@@ -669,25 +715,77 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
         {activeTab === 'orders' && (
           <div className="space-y-6">
             {!isAdmin && <h3 className="text-2xl font-bold mb-6">Historial de Compras</h3>}
-            {userOrders.length === 0 ? <p className="text-center text-gray-400 py-20">{isAdmin ? 'Sin pedidos.' : 'Aún no tienes compras registradas.'}</p> : userOrders.map(o => (
-              <div key={o.id} className="bg-white p-8 rounded-[32px] border border-gray-100 flex justify-between items-center shadow-sm">
-                <div>
-                  <div className="flex items-center gap-3"><span className="bg-green-50 text-green-600 text-[9px] font-bold px-2 py-1 rounded-md uppercase">Pagado</span><span className="font-mono text-lg font-bold">#{o.orderNumber}</span></div>
-                  <p className="text-[11px] text-gray-400 font-bold uppercase mt-1">{o.createdAt?.toDate().toLocaleDateString()}</p>
-                  <p className="mt-2 font-bold text-sm">{o.customer?.nombre}</p>
+            {userOrders.length === 0 ? <p className="text-center text-gray-400 py-20">{isAdmin ? 'Sin pedidos.' : 'Aún no tienes compras registradas.'}</p> : userOrders.map(o => {
+              const currentStatus = o.orderStatus || o.status || 'Pendiente';
+              const stateColors = { 'Pendiente': 'bg-yellow-50 text-yellow-600', 'Pagado': 'bg-green-50 text-green-600', 'Preparando': 'bg-blue-50 text-blue-600', 'Enviado': 'bg-indigo-50 text-indigo-600', 'Entregado': 'bg-green-100 text-green-800', 'Cancelado': 'bg-red-50 text-red-600', 'En Devolución': 'bg-orange-50 text-orange-600', 'Producto Devuelto': 'bg-red-100 text-red-800', 'Pendiente de Reembolso': 'bg-yellow-100 text-yellow-800' };
+              const colorClass = stateColors[currentStatus] || 'bg-gray-50 text-gray-600';
+
+              return (
+                <div key={o.id} className="bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm flex flex-col gap-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <span className={`${colorClass} text-[9px] font-bold px-2 py-1 rounded-md uppercase`}>{currentStatus}</span>
+                        <span className="font-mono text-lg font-bold">#{o.orderNumber || o.id.slice(-6).toUpperCase()}</span>
+                      </div>
+                      <p className="text-[11px] text-gray-400 font-bold uppercase mt-1">{o.createdAt?.toDate().toLocaleString()}</p>
+                      <p className="mt-2 font-bold text-sm">{o.customer?.nombre}</p>
+                      <p className="text-xs text-gray-500 mt-1">{o.customer?.email} • {o.customer?.telefono}</p>
+                      {isAdmin && (
+                        <div className="mt-4 flex items-center gap-2">
+                          <span className="text-xs font-bold text-gray-400 uppercase">Actualizar Estado:</span>
+                          <select
+                            value={currentStatus}
+                            onChange={async (e) => {
+                              const newStatus = e.target.value;
+                              const newHistory = [...(o.statusHistory || [{ status: currentStatus, date: o.createdAt?.toDate().toISOString() || new Date().toISOString() }]), { status: newStatus, date: new Date().toISOString() }];
+                              await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'orders', o.id), { orderStatus: newStatus, statusHistory: newHistory });
+                            }}
+                            className="bg-[#f5f5f7] p-2 rounded-xl text-xs outline-none font-bold text-indigo-900 border border-indigo-100 cursor-pointer"
+                          >
+                            <option value="Pendiente">Pendiente</option>
+                            <option value="Pagado">Pagado</option>
+                            <option value="Preparando">Preparando</option>
+                            <option value="Enviado">Enviado</option>
+                            <option value="Entregado">Entregado</option>
+                            <option value="Cancelado">Cancelado</option>
+                            <option value="En Devolución">En Devolución</option>
+                            <option value="Producto Devuelto">Producto Devuelto</option>
+                            <option value="Pendiente de Reembolso">Pendiente de Reembolso</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl font-black">${o.total?.toLocaleString('es-CL')}</span>
+                      <p className="text-[10px] text-gray-400 font-bold uppercase">{o.items?.length} items</p>
+                    </div>
+                  </div>
+                  {isAdmin && o.statusHistory && o.statusHistory.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-50">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Historial de Estados</p>
+                      <div className="space-y-1">
+                        {o.statusHistory.map((h, i) => (
+                          <div key={i} className="flex justify-between text-[11px] text-gray-500">
+                            <span>{h.status}</span>
+                            <span>{new Date(h.date).toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="text-right"><span className="text-2xl font-black">${o.total?.toLocaleString('es-CL')}</span><p className="text-[10px] text-gray-400 font-bold uppercase">{o.items?.length} items</p></div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
         {activeTab === 'customers' && isSuperadmin && (
           <div className="space-y-6">
             <h3 className="text-2xl font-bold mb-6">Base de Clientes</h3>
-            <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden">
-              <table className="w-full text-left"><thead className="bg-[#f5f5f7] text-[10px] font-bold text-gray-400 uppercase"><tr><th className="p-6">Email</th><th className="p-6">RUT</th><th className="p-6">Nombre y Dirección</th><th className="p-6 text-center">Rol</th><th className="p-6 text-center">Consentimiento Marketing</th></tr></thead>
-                <tbody className="divide-y divide-gray-50">{customers.map(c => (<tr key={c.id}><td className="p-6 font-bold">{c.email}</td><td className="p-6 text-sm">{c.savedAddress?.rut || 'N/A'}</td><td className="p-6">{c.savedAddress ? <><p className="font-bold mb-1 text-sm">{c.savedAddress.nombre}</p><p className="text-xs text-gray-500 max-w-[250px]">{c.savedAddress.calle} {c.savedAddress.numero} {c.savedAddress.depto ? `Dpto ${c.savedAddress.depto}` : ''}, {c.savedAddress.comuna}, {c.savedAddress.region}</p></> : <span className="text-xs text-gray-400 italic">Sin dirección guardada</span>}</td><td className="p-6 text-center">{c.email === 'musanhue@gmail.com' ? <span className="text-gray-400 text-xs italic font-semibold">Superadmin</span> : <select value={c.role || 'cliente'} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', c.id), { role: e.target.value })} className="bg-gray-100 p-2 rounded-xl text-xs outline-none cursor-pointer font-bold uppercase tracking-widest text-indigo-900 border border-gray-200"><option value="cliente">Cliente</option><option value="admin">Administrador</option></select>}</td><td className="p-6 text-center">{c.consentimiento ? <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest inline-block">PERMITIDO</span> : <span className="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest inline-block">DENEGADO</span>}</td></tr>))}</tbody></table>
+            <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left whitespace-nowrap"><thead className="bg-[#f5f5f7] text-[10px] font-bold text-gray-400 uppercase"><tr><th className="p-6">Email</th><th className="p-6">RUT</th><th className="p-6">Nombre y Dirección</th><th className="p-6 text-center">Rol</th><th className="p-6 text-center">Marketing</th><th className="p-6 text-center">Acción</th></tr></thead>
+                <tbody className="divide-y divide-gray-50 text-sm">{customers.map(c => (<tr key={c.id}><td className="p-6 font-bold">{c.email}</td><td className="p-6">{c.savedAddress?.rut || 'N/A'}</td><td className="p-6">{c.savedAddress ? <><p className="font-bold mb-1">{c.savedAddress.nombre}</p><p className="text-xs text-gray-500 whitespace-normal min-w-[200px]">{c.savedAddress.calle} {c.savedAddress.numero} {c.savedAddress.depto ? `Dpto ${c.savedAddress.depto}` : ''}, {c.savedAddress.comuna}, {c.savedAddress.region}</p></> : <span className="text-xs text-gray-400 italic">Sin dirección guardada</span>}</td><td className="p-6 text-center">{c.email === 'musanhue@gmail.com' ? <span className="text-gray-400 text-xs italic font-semibold">Superadmin</span> : <select value={c.role || 'cliente'} onChange={async (e) => await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', c.id), { role: e.target.value })} className="bg-gray-100 p-2 rounded-xl text-xs outline-none cursor-pointer font-bold uppercase tracking-widest text-indigo-900 border border-gray-200"><option value="cliente">Cliente</option><option value="admin">Administrador</option></select>}</td><td className="p-6 text-center">{c.consentimiento ? <span className="bg-indigo-100 text-indigo-600 px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest inline-block">SÍ</span> : <span className="bg-gray-100 text-gray-400 px-3 py-1 rounded-full text-[10px] uppercase font-bold tracking-widest inline-block">NO</span>}</td><td className="p-6 text-center">{c.email !== 'musanhue@gmail.com' && <button onClick={async () => { if (confirm('¿Eliminar usuario definitivamente de Firestore?')) { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', c.id)); } }} className="text-gray-300 hover:text-red-500" title="Eliminar Usuario"><Trash size={16} /></button>}</td></tr>))}</tbody></table>
             </div>
           </div>
         )}

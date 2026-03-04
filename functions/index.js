@@ -15,13 +15,16 @@ const cheerio = require('cheerio');
 
 exports.scrapeDropiProduct = onCall(async (request) => {
   try {
+    if (!request || !request.data || !request.data.url) {
+      throw new HttpsError('invalid-argument', 'Petición sin URL válida');
+    }
     const { url } = request.data;
     if (!url || !url.includes('dropi')) {
       throw new HttpsError('invalid-argument', 'URL inválida de Dropi');
     }
 
     // Usando una cabecera para simular un navegador moderno y saltar bloqueos simples
-    const { data } = await axios.get(url, {
+    const response = await axios.get(url, {
       headers: {
         'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -29,7 +32,8 @@ exports.scrapeDropiProduct = onCall(async (request) => {
       }
     });
 
-    const $ = cheerio.load(data);
+    if (!response || !response.data) throw new Error("Sin respuesta de Dropi");
+    const $ = cheerio.load(response.data);
 
     // Selectors to tune based on Dropi's actual DOM structure
     // Dropi product pages usually have a title, some price, and images in a gallery.
@@ -39,6 +43,16 @@ exports.scrapeDropiProduct = onCall(async (request) => {
     const title = $('h1').first().text().trim() || $('title').text().replace('- Dropi', '').trim();
 
     const description = $('.description, #tab-description, .product-details').first().text().replace(/\s+/g, ' ').trim() || '';
+
+    // Intento de extraer categoría
+    let category = '';
+    const breadcrumbText = $('.breadcrumb, .breadcrumbs, .nav-links').text().trim();
+    if (breadcrumbText) {
+      const parts = breadcrumbText.split(/[\/>-]/).map(p => p.trim()).filter(Boolean);
+      category = parts[parts.length - 1] || 'General';
+    } else {
+      category = 'tecnologia';
+    }
 
     // Images: look for main product image or gallery
     const images = [];
@@ -58,8 +72,9 @@ exports.scrapeDropiProduct = onCall(async (request) => {
     return {
       success: true,
       title,
-      description: description.substring(0, 500), // Limit description length
-      images: Array.from(new Set(images)).slice(0, 5), // Max 5 unique images
+      description: description.substring(0, 1000), // Limit description length
+      category,
+      images: Array.from(new Set(images)), // All images
       dropiSku,
       originalUrl: url
     };

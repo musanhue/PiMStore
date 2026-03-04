@@ -16,6 +16,17 @@ export default function Novedades({ products }) {
                         <div className="flex-1">
                             <span className="text-indigo-600 font-bold text-[11px] uppercase tracking-[0.2em]">{p.category}</span>
                             <h3 className="text-3xl font-bold mt-3 mb-4 tracking-tight leading-tight">{p.title}</h3>
+                            <div className="flex items-center gap-3 mb-4">
+                                <p className="text-[24px] font-bold tracking-tight">${Number(p.price).toLocaleString('es-CL')}</p>
+                                {p.precioNormal && Number(p.precioNormal) > Number(p.price) && (
+                                    <>
+                                        <p className="text-md text-gray-400 line-through font-bold">${Number(p.precioNormal).toLocaleString('es-CL')}</p>
+                                        <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full text-[10px] font-bold tracking-widest shadow-sm">
+                                            -{Math.round(((Number(p.precioNormal) - Number(p.price)) / Number(p.precioNormal)) * 100)}%
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                             <p className="text-gray-500 mb-8 max-w-lg leading-relaxed">{p.description}</p>
                             <span className="text-black font-bold flex items-center gap-2 group-hover:gap-4 transition-all uppercase text-xs tracking-widest"><Zap size={14} className="text-indigo-600" /> Ver Detalles <ArrowRight size={14} /></span>
                         </div>

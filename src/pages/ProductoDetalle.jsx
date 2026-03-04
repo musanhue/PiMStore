@@ -76,7 +76,17 @@ export default function ProductoDetalle({ addToCart, appId }) {
                         SKU: {product.dropiSku || product.id} {product.dropiSku && <Zap size={10} className="text-indigo-500 inline" />}
                     </span>
                     <h1 className="text-[40px] font-black leading-tight mb-6 tracking-tight">{product.title}</h1>
-                    <p className="text-[32px] font-bold text-indigo-600 mb-8">${product.price?.toLocaleString('es-CL')}</p>
+                    <div className="flex items-center gap-4 mb-8">
+                        <p className="text-[32px] font-bold text-indigo-600">${Number(product.price).toLocaleString('es-CL')}</p>
+                        {product.precioNormal && Number(product.precioNormal) > Number(product.price) && (
+                            <>
+                                <p className="text-xl text-gray-400 line-through font-bold">${Number(product.precioNormal).toLocaleString('es-CL')}</p>
+                                <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs font-bold tracking-widest shadow-sm">
+                                    -{Math.round(((Number(product.precioNormal) - Number(product.price)) / Number(product.precioNormal)) * 100)}%
+                                </span>
+                            </>
+                        )}
+                    </div>
 
                     <div className="flex-grow space-y-6 mb-10">
                         <p className="text-[17px] text-gray-600 leading-relaxed max-w-lg">{product.description}</p>
