@@ -1,21 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Star, Zap } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, Zap, Pause, Play } from 'lucide-react';
 
 export default function Home({ loading, products }) {
     const featuredProducts = products.filter(p => p.isFeatured);
     const [currentSlide, setCurrentSlide] = useState(0);
+    const [isPlaying, setIsPlaying] = useState(true);
 
     useEffect(() => {
-        if (featuredProducts.length <= 1) return;
+        if (featuredProducts.length <= 1 || !isPlaying) return;
         const timer = setInterval(() => {
             setCurrentSlide(prev => (prev + 1) % featuredProducts.length);
         }, 5000);
         return () => clearInterval(timer);
-    }, [featuredProducts.length]);
+    }, [featuredProducts.length, isPlaying]);
 
     const nextSlide = () => setCurrentSlide(prev => (prev + 1) % featuredProducts.length);
     const prevSlide = () => setCurrentSlide(prev => (prev === 0 ? featuredProducts.length - 1 : prev - 1));
+    const togglePlay = () => setIsPlaying(prev => !prev);
 
     return (
         <>
@@ -68,10 +70,15 @@ export default function Home({ loading, products }) {
                                 <button onClick={nextSlide} className="absolute right-6 top-1/2 -translate-y-1/2 z-30 p-3 bg-white/80 hover:bg-white backdrop-blur-md rounded-full shadow-lg text-gray-800 transition-colors">
                                     <ChevronRight size={24} />
                                 </button>
-                                <div className="absolute bottom-6 left-1/2 -translate-y-0 -translate-x-1/2 z-30 flex gap-2">
-                                    {featuredProducts.map((_, i) => (
-                                        <button key={i} onClick={() => setCurrentSlide(i)} className={`w-2.5 h-2.5 rounded-full transition-all ${i === currentSlide ? 'bg-indigo-600 w-8' : 'bg-gray-300 hover:bg-gray-400'}`} />
-                                    ))}
+                                <div className="absolute bottom-6 left-1/2 -translate-y-0 -translate-x-1/2 z-30 flex items-center justify-center gap-4 bg-white/50 backdrop-blur-md px-4 py-2 rounded-full shadow-sm">
+                                    <button onClick={togglePlay} className="text-gray-800 hover:text-black transition-colors" title={isPlaying ? "Pausar" : "Reproducir"}>
+                                        {isPlaying ? <Pause size={16} /> : <Play size={16} />}
+                                    </button>
+                                    <div className="flex gap-2 items-center">
+                                        {featuredProducts.map((_, i) => (
+                                            <button key={i} onClick={() => setCurrentSlide(i)} className={`w-2 h-2 rounded-full transition-all ${i === currentSlide ? 'bg-indigo-600 w-6' : 'bg-gray-400 hover:bg-gray-600'}`} />
+                                        ))}
+                                    </div>
                                 </div>
                             </>
                         )}

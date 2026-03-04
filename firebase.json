@@ -8,6 +8,10 @@
     ],
     "rewrites": [
       {
+        "source": "/wp-json/**",
+        "function": "wcWebhook"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

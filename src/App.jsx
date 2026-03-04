@@ -163,7 +163,7 @@ export default function App() {
 
   // Estados Admin
   const [adminTab, setAdminTab] = useState('dashboard');
-  const [newProd, setNewProd] = useState({ title: '', price: '', precioNormal: '', category: '', image: '', description: '', stock: 0, dropiSku: '', isFeatured: false });
+  const [newProd, setNewProd] = useState({ title: '', price: '', precioNormal: '', category: '', images: ['', '', '', '', '', ''], description: '', stock: 0, dropiSku: '', dropiUrl: '', isFeatured: false });
   const [editingProductId, setEditingProductId] = useState(null);
 
   // Estados Tracking
@@ -283,9 +283,15 @@ export default function App() {
         }
       }
 
+      // Filter empty images and use the first one as main 'image' for backward compatibility
+      const validImages = newProd.images.filter(img => img.trim() !== '');
+      const mainImage = validImages.length > 0 ? validImages[0] : '';
+
       if (editingProductId) {
         await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', editingProductId), {
           ...newProd,
+          image: mainImage,
+          images: validImages,
           price: Number(newProd.price),
           precioNormal: newProd.precioNormal ? Number(newProd.precioNormal) : '',
           stock: Number(newProd.stock || 0),
@@ -295,6 +301,8 @@ export default function App() {
       } else {
         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), {
           ...newProd,
+          image: mainImage,
+          images: validImages,
           price: Number(newProd.price),
           precioNormal: newProd.precioNormal ? Number(newProd.precioNormal) : '',
           stock: Number(newProd.stock || 0),
@@ -302,7 +310,7 @@ export default function App() {
         });
         alert("Producto agregado correctamente");
       }
-      setNewProd({ title: '', price: '', precioNormal: '', category: '', image: '', description: '', stock: 0, dropiSku: '', isFeatured: false });
+      setNewProd({ title: '', price: '', precioNormal: '', category: '', images: ['', '', '', '', '', ''], description: '', stock: 0, dropiSku: '', dropiUrl: '', isFeatured: false });
       setEditingProductId(null);
       setAdminTab('inventory');
     } catch (e) {
@@ -569,32 +577,181 @@ const AuthModal = ({ onClose, auth }) => {
 const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, orders, customers, newProd, setNewProd, handleAddProduct, deleteProduct, tab, setTab, editingProductId, setEditingProductId }) => {
   const [isScraping, setIsScraping] = useState(false);
   const [dropiUrlInput, setDropiUrlInput] = useState('');
+  const [scrapeAttempts, setScrapeAttempts] = useState(0);
+  const [showManualFallback, setShowManualFallback] = useState(true); // Siempre mostrar el fallback por defecto
+  const [manualHtmlInput, setManualHtmlInput] = useState('');
 
   const handleLogin = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { } };
+
+  const processDropiHtml = (htmlContent, url) => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+
+    const title = doc.querySelector('h1')?.textContent?.trim() || doc.querySelector('title')?.textContent?.replace(/(-|\|)?\s*Dropi/i, '')?.trim() || '';
+
+    // Descripción: Buscar específicamente en la pestaña "Detalles" o "Características"
+    let description = '';
+    // Intentar buscar headers que digan Características o Detalles y tomar el siguiente elemento
+    const possibleHeaders = Array.from(doc.querySelectorAll('h2, h3, h4, th, div.font-bold, p.font-bold')).filter(el => {
+      const text = el.textContent.toLowerCase();
+      return text.includes('característica') || text.includes('detalle') || text.includes('especificaci');
+    });
+
+    if (possibleHeaders.length > 0) {
+      let nextEl = possibleHeaders[0].nextElementSibling;
+      while (nextEl && description.length < 50) {
+        description += (nextEl.innerText || nextEl.textContent).trim() + '\n\n';
+        nextEl = nextEl.nextElementSibling;
+      }
+    }
+
+    // Fallback original para descripción
+    if (description.trim().length < 20) {
+      const descriptionEl = doc.querySelector('.description, #tab-description, .product-details, div[id*="description"], div[class*="description"], article');
+      description = descriptionEl ? (descriptionEl.innerText || descriptionEl.textContent).trim() : '';
+      if (!description) {
+        description = Array.from(doc.querySelectorAll('p'))
+          .map(p => p.textContent.trim())
+          .filter(t => t.length > 20)
+          .join('\n\n');
+      }
+    }
+
+    // Categoría
+    let category = 'General';
+    const breadcrumb = doc.querySelector('.breadcrumb, .breadcrumbs, ul[class*="breadcrumb"], nav[aria-label="Breadcrumb"]');
+    if (breadcrumb) {
+      const parts = breadcrumb.textContent.split(/[\/>-]/).map(p => p.trim()).filter(Boolean);
+      const candidates = parts.filter(p => p.toLowerCase() !== title.toLowerCase() && p !== 'Inicio' && p !== 'Home');
+      if (candidates.length > 0) category = candidates[candidates.length - 1];
+    } else {
+      const metaCat = doc.querySelector('meta[property="product:category"]');
+      if (metaCat) category = metaCat.getAttribute('content');
+    }
+
+    // Imágenes de la galería
+    const images = [];
+    doc.querySelectorAll('img').forEach(el => {
+      let src = el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src') || el.currentSrc;
+      if (src && !src.toLowerCase().includes('logo') && !src.toLowerCase().includes('icon') && !src.toLowerCase().includes('avatar')) {
+        if (src.startsWith('//')) src = 'https:' + src;
+        else if (src.startsWith('/')) {
+          try { src = new URL(src, new URL(url).origin).href; } catch (e) { }
+        }
+
+        if (src.startsWith('http')) {
+          images.push(src);
+        }
+      }
+    });
+
+    let dropiSku = '';
+    try {
+      const match = url.match(/product-details\/(\d+)/) || url.match(/\/(\d+)$/) || url.match(/id=(\d+)/);
+      if (match) dropiSku = match[1];
+    } catch (e) { }
+
+    return {
+      success: true,
+      title,
+      description,
+      category,
+      images: Array.from(new Set(images)),
+      dropiSku
+    };
+  };
 
   const handleScrapeDropi = async () => {
     if (!dropiUrlInput) return alert("Ingresa un enlace de Dropi primero.");
     setIsScraping(true);
+
     try {
-      const scrapeDropiProduct = httpsCallable(functions, 'scrapeDropiProduct');
-      const result = await scrapeDropiProduct({ url: dropiUrlInput });
-      const data = result.data;
-      if (data.success) {
+      // 1. Intentar fetch directo desde el navegador (incluye cookies/sesión activa en Dropi)
+      const response = await fetch(dropiUrlInput, {
+        method: 'GET',
+        // 'include' usa las cookies de la sesión activa si CORS lo permite
+        credentials: 'include',
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml',
+        }
+      });
+
+      if (!response.ok) throw new Error("Status no fue 200 OK");
+
+      const htmlText = await response.text();
+      if (!htmlText) throw new Error("Respuesta vacía");
+
+      const data = processDropiHtml(htmlText, dropiUrlInput);
+
+      if (data.success && data.title) {
+        const extractedImages = data.images.slice(0, 6);
+        const currentImages = [...newProd.images];
+        for (let i = 0; i < extractedImages.length; i++) {
+          currentImages[i] = extractedImages[i];
+        }
+
         setNewProd(prev => ({
           ...prev,
           title: data.title || prev.title,
           description: data.description || prev.description,
-          image: data.images?.length > 0 ? data.images[0] : prev.image,
-          dropiSku: data.dropiSku || prev.dropiSku
+          category: data.category !== 'General' ? data.category : prev.category,
+          images: currentImages,
+          dropiSku: data.dropiSku || prev.dropiSku,
+          dropiUrl: dropiUrlInput
         }));
         setDropiUrlInput('');
+        setScrapeAttempts(0);
         alert("Datos extraídos correctamente. ¡Revisa y completa el precio!");
+      } else {
+        throw new Error("No se encontró el título del producto en el HTML.");
       }
+
     } catch (error) {
-      console.error(error);
-      alert("No se pudo extraer la información automáticamente. " + error.message);
+      console.warn("Fallo el fetch directo (probablemente CORS o Error de Sesión):", error);
+
+      // Manejo de intentos
+      const newAttempts = scrapeAttempts + 1;
+      setScrapeAttempts(newAttempts);
+
+      if (newAttempts >= 1) { // Reducido a 1
+        setShowManualFallback(true);
+        alert(`Extracción automática falló. Por favor usa el método manual pegando el HTML abajo.`);
+      } else {
+        alert(`Intento ${newAttempts}/3 fallido. Probando de nuevo o verifica tu conexión a Dropi.`);
+      }
     } finally {
       setIsScraping(false);
+    }
+  };
+
+  const handleManualHtmlProcess = () => {
+    if (!manualHtmlInput) return alert("Pega el código HTML primero.");
+    try {
+      const data = processDropiHtml(manualHtmlInput, dropiUrlInput || 'https://dropi.cl');
+      if (data.title || data.images.length > 0) {
+        const extractedImages = data.images.slice(0, 6);
+        const currentImages = [...newProd.images];
+        for (let i = 0; i < extractedImages.length; i++) {
+          currentImages[i] = extractedImages[i];
+        }
+
+        setNewProd(prev => ({
+          ...prev,
+          title: data.title || prev.title,
+          description: data.description || prev.description,
+          category: data.category !== 'General' ? data.category : prev.category,
+          images: currentImages,
+          dropiSku: data.dropiSku || prev.dropiSku,
+          dropiUrl: dropiUrlInput || prev.dropiUrl
+        }));
+        setManualHtmlInput('');
+        setScrapeAttempts(0);
+        alert("Datos extraídos exitosamente desde el HTML manual.");
+      } else {
+        alert("No se pudo extraer información clara de este HTML.");
+      }
+    } catch (e) {
+      alert("Error procesando HTML: " + e.message);
     }
   };
 
@@ -653,7 +810,7 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
                   {editingProductId ? <><Star size={20} className="text-yellow-500" /> Editar Item</> : <><PlusCircle size={20} /> Nuevo Item</>}
                 </h3>
                 {editingProductId && (
-                  <button type="button" onClick={() => { setEditingProductId(null); setNewProd({ title: '', price: '', precioNormal: '', category: '', image: '', description: '', stock: 0, dropiSku: '', isFeatured: false }); }} className="text-sm font-bold text-gray-400 hover:text-black">
+                  <button type="button" onClick={() => { setEditingProductId(null); setNewProd({ title: '', price: '', precioNormal: '', category: '', images: ['', '', '', '', '', ''], description: '', stock: 0, dropiSku: '', dropiUrl: '', isFeatured: false }); }} className="text-sm font-bold text-gray-400 hover:text-black">
                     Cancelar Edición
                   </button>
                 )}
@@ -680,7 +837,58 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
                     {isScraping ? 'Extrayendo...' : 'Extraer Datos'}
                   </button>
                 </div>
-                <p className="text-xs text-indigo-700/70 mt-3 font-medium">Pega el link del producto y extraeremos el nombre, imágenes y descripción automáticamente.</p>
+                <p className="text-xs text-indigo-700/70 mt-3 font-medium">Pega el link del producto y extraeremos el nombre, imágenes y descripción automáticamente. Utiliza tu sesión activa.</p>
+
+                {showManualFallback && (
+                  <div className="mt-6 p-4 bg-white rounded-xl border border-indigo-200 shadow-sm animate-in fade-in zoom-in duration-300">
+                    <h4 className="text-indigo-900 font-bold mb-2 flex items-center gap-2"><Zap size={16} /> Extracción Inmediata (HTML)</h4>
+                    <p className="text-xs text-gray-600 mb-4">Si falla lo anterior, ve a la página de Dropi, haz clic derecho -{'>'} "Ver código fuente", cópialo todo y pégalo aquí.</p>
+                    <textarea
+                      className="w-full bg-[#f5f5f7] p-3 rounded-xl border border-indigo-100 outline-none focus:ring-2 focus:ring-indigo-500 text-xs h-32 mb-3"
+                      placeholder="Pega el código HTML completo aquí y veremos la magia..."
+                      value={manualHtmlInput}
+                      onChange={async (e) => {
+                        const val = e.target.value;
+                        setManualHtmlInput(val);
+                        if (val && val.length > 500) {
+                          // Auto process si detecta texto largo
+                          setTimeout(() => {
+                            try {
+                              const data = processDropiHtml(val, dropiUrlInput || 'https://dropi.cl');
+                              if (data.title || data.images.length > 0) {
+                                const extractedImages = data.images.slice(0, 6);
+                                setNewProd(prev => {
+                                  const currentImages = [...prev.images];
+                                  for (let i = 0; i < extractedImages.length; i++) {
+                                    currentImages[i] = extractedImages[i];
+                                  }
+                                  return {
+                                    ...prev,
+                                    title: data.title || prev.title,
+                                    description: data.description || prev.description,
+                                    category: data.category !== 'General' ? data.category : prev.category,
+                                    images: currentImages,
+                                    dropiSku: data.dropiSku || prev.dropiSku,
+                                    dropiUrl: dropiUrlInput || prev.dropiUrl
+                                  };
+                                });
+                                setManualHtmlInput('');
+                                alert("Datos extraídos inmediatamente desde el HTML.");
+                              }
+                            } catch (err) { }
+                          }, 500);
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleManualHtmlProcess}
+                      className="w-full bg-indigo-600 text-white px-4 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+                    >
+                      Procesar HTML Manualmente
+                    </button>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={(e) => {
@@ -692,7 +900,24 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
                 <input placeholder="Precio Venta" type="number" value={newProd.price} onChange={e => setNewProd({ ...newProd, price: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="Precio Normal (Opcional)" type="number" value={newProd.precioNormal} onChange={e => setNewProd({ ...newProd, precioNormal: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" />
                 <input placeholder="Categoría" value={newProd.category} onChange={e => setNewProd({ ...newProd, category: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
-                <input placeholder="URL Imagen" value={newProd.image} onChange={e => setNewProd({ ...newProd, image: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
+
+                {/* 6 Images Input */}
+                <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {[0, 1, 2, 3, 4, 5].map((idx) => (
+                    <input
+                      key={idx}
+                      placeholder={`URL Imagen ${idx === 0 ? 'Principal' : idx + 1}`}
+                      value={newProd.images[idx] || ''}
+                      onChange={e => {
+                        const newImages = [...newProd.images];
+                        newImages[idx] = e.target.value;
+                        setNewProd({ ...newProd, images: newImages });
+                      }}
+                      className={`bg-[#f5f5f7] p-3 rounded-xl outline-none text-xs border ${idx === 0 ? 'border-indigo-200 focus:border-indigo-500' : 'border-transparent'}`}
+                      required={idx === 0}
+                    />
+                  ))}
+                </div>
                 <input placeholder="Stock" type="number" value={newProd.stock} onChange={e => setNewProd({ ...newProd, stock: e.target.value })} className="bg-[#f5f5f7] p-4 rounded-xl outline-none" required />
                 <input placeholder="SKU Dropi" value={newProd.dropiSku} onChange={e => setNewProd({ ...newProd, dropiSku: e.target.value })} className="bg-indigo-50/50 p-4 rounded-xl outline-none border border-indigo-100" />
 
@@ -707,7 +932,7 @@ const AdminPanel = ({ onClose, user, userProfile, auth, functions, products, ord
             </div>
             <div className="bg-white rounded-[32px] border border-gray-100 overflow-hidden">
               <table className="w-full text-left"><thead className="bg-[#f5f5f7] text-[10px] font-bold text-gray-400 uppercase"><tr><th className="p-6">Producto</th><th className="p-6">Stock</th><th className="p-6">Precio</th><th className="p-6 text-center">Acción</th></tr></thead>
-                <tbody className="divide-y divide-gray-50">{products.map(p => (<tr key={p.id}><td className="p-6 flex items-center gap-4"><img src={p.image} className="w-10 h-10 rounded-lg object-cover" /> <div>{p.isFeatured && <Star size={12} className="inline text-yellow-500 fill-yellow-500 mr-1 mb-0.5" />}<span className="font-medium">{p.title}</span></div></td><td className="p-6">{p.stock}</td><td className="p-6">${Number(p.price).toLocaleString('es-CL')}</td><td className="p-6 text-center whitespace-nowrap"><button onClick={() => { setEditingProductId(p.id); setNewProd({ title: p.title, price: p.price, precioNormal: p.precioNormal || '', category: p.category, image: p.image, description: p.description, stock: p.stock, dropiSku: p.dropiSku || '', isFeatured: p.isFeatured || false }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-400 hover:text-indigo-600 mr-4" title="Editar"><Edit2 size={16} /></button><button onClick={() => deleteProduct(p.id)} className="text-gray-300 hover:text-red-500" title="Eliminar"><Trash size={16} /></button></td></tr>))}</tbody></table>
+                <tbody className="divide-y divide-gray-50">{products.map(p => (<tr key={p.id}><td className="p-6 flex items-center gap-4"><img src={p.image || (p.images && p.images[0])} className="w-10 h-10 rounded-lg object-cover" /> <div>{p.isFeatured && <Star size={12} className="inline text-yellow-500 fill-yellow-500 mr-1 mb-0.5" />}<span className="font-medium">{p.title}</span> {p.dropiUrl && <a href={p.dropiUrl} target="_blank" rel="noopener noreferrer" className="inline-flex text-indigo-500 hover:text-indigo-700 ml-2" title="Ver en Dropi"><Zap size={14} /></a>}</div></td><td className="p-6">{p.stock}</td><td className="p-6">${Number(p.price).toLocaleString('es-CL')}</td><td className="p-6 text-center whitespace-nowrap"><button onClick={() => { setEditingProductId(p.id); const imgs = p.images || [p.image, '', '', '', '', '']; while (imgs.length < 6) imgs.push(''); setNewProd({ title: p.title, price: p.price, precioNormal: p.precioNormal || '', category: p.category, images: imgs, description: p.description, stock: p.stock, dropiSku: p.dropiSku || '', dropiUrl: p.dropiUrl || '', isFeatured: p.isFeatured || false }); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="text-gray-400 hover:text-indigo-600 mr-4" title="Editar"><Edit2 size={16} /></button><button onClick={() => deleteProduct(p.id)} className="text-gray-300 hover:text-red-500" title="Eliminar"><Trash size={16} /></button></td></tr>))}</tbody></table>
             </div>
           </div>
         )}
